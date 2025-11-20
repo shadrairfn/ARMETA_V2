@@ -1,5 +1,7 @@
 import { pgTable, serial, varchar, integer, timestamp, text, primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { vector, jsonb } from "drizzle-orm/pg-core";
+
 
 export const users = pgTable("users", {
   id_user: serial("id_user").primaryKey().notNull(),
@@ -46,13 +48,13 @@ export const mataKuliahRelations = relations(mataKuliah, ({ many }) => ({
 }));
 
 export const ulasan = pgTable("ulasan", {
-  id_ulasan: serial("id_ulasan").primaryKey().notNull(),
-  id_user: integer("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
-  id_matkul: integer("id_matkul").references(() => mataKuliah.id_matkul, { onDelete: "cascade" }),
-  id_dosen: integer("id_dosen").references(() => dosen.id_dosen, { onDelete: "cascade" }),
-  files: varchar("files", { length: 255 }),
+  id_ulasan: serial("id_ulasan").primaryKey(),
+  id_user: integer("id_user").notNull().references(() => users.id_user),
+  id_matkul: integer("id_matkul").references(() => mataKuliah.id_matkul),
+  id_dosen: integer("id_dosen").references(() => dosen.id_dosen),
+  files: jsonb("files").$type/** @type {string[]} */(),
   teks_ulasan: text("teks_ulasan").notNull(),
-  vectorize_ulasan: text("vectorize_ulasan").notNull(),
+  vectorize_ulasan: vector("vectorize_ulasan", { dimensions: 1024 }),
   tanggal_upload: timestamp("tanggal_upload").defaultNow(),
 });
 

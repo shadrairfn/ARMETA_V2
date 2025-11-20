@@ -14,6 +14,7 @@ import passport from "passport";
 
 import authRoutes from "./routes/googleAuth.js";
 import userRoutes from "./routes/userRoutes.js";
+import ulasanRoutes from "./routes/ulasanRoutes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,7 @@ app.use(passport.session());
 // ====== Routes ======
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/ulasan", ulasanRoutes);
 
 app.get("/", (req, res) => {
   res.json({
