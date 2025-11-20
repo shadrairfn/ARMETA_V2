@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - ARMETA</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="loadingScreen" class="loading">
+    <h2>Memuat...</h2>
+  </div>
+
+  <div id="dashboardContent" class="dashboard-container hidden">
+    <div class="user-card">
+      <div class="user-header">
+        <div class="user-avatar" id="userAvatar">
+          <!-- Avatar akan ditampilkan di sini -->
+        </div>
+        <div class="user-info">
+          <h2 id="userName">Loading...</h2>
+          <p id="userEmail">Loading...</p>
+        </div>
+      </div>
+
+      <div class="user-details">
+        <div class="detail-item">
+          <span class="detail-label">User ID</span>
+          <span class="detail-value" id="userId">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Poin Reputasi</span>
+          <span class="detail-value" id="userPoin">-</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Status Akun</span>
+          <span class="detail-value">Aktif</span>
+        </div>
+      </div>
+
+      <button id="logoutBtn" class="btn btn-logout">Keluar</button>
+    </div>
+
+    <div class="user-card">
+      <h3 style="margin-bottom: 20px; color: #333;">Update Profile</h3>
+      <form id="updateProfileForm">
+        <div class="form-group">
+          <label for="updateNama">Nama Lengkap</label>
+          <input type="text" id="updateNama" name="nama" placeholder="Nama lengkap">
+        </div>
+
+        <div class="form-group">
+          <label for="updateImage">URL Gambar Profile</label>
+          <input type="text" id="updateImage" name="image" placeholder="https://example.com/image.jpg">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Update Profile</button>
+      </form>
+    </div>
+
+    <div class="user-card">
+      <h3 style="margin-bottom: 20px; color: #333;">Ubah Password</h3>
+      <div id="changePasswordAlert"></div>
+      <form id="changePasswordForm">
+        <div class="form-group">
+          <label for="oldPassword">Password Lama</label>
+          <input type="password" id="oldPassword" name="oldPassword" placeholder="Password lama" required>
+        </div>
+
+        <div class="form-group">
+          <label for="newPassword">Password Baru</label>
+          <input type="password" id="newPassword" name="newPassword" placeholder="Minimal 6 karakter" required minlength="6">
+        </div>
+
+        <div class="form-group">
+          <label for="confirmNewPassword">Konfirmasi Password Baru</label>
+          <input type="password" id="confirmNewPassword" placeholder="Masukkan password baru lagi" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Ubah Password</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000';
+
+    // Check if user is logged in
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      window.location.href = 'login.html';
+    }
+
+    // Load user data
+    async function loadUserData() {
+      try {
+        const response = await fetch(`${API_URL}/api/users/me`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const user = data.data.user;
+
+          // Update UI dengan data user
+          document.getElementById('userName').textContent = user.nama;
+          document.getElementById('userEmail').textContent = user.email;
+          document.getElementById('userId').textContent = user.id_user;
+          document.getElementById('userPoin').textContent = user.poin_reputasi || 0;
+
+          // Set avatar
+          const avatarDiv = document.getElementById('userAvatar');
+          if (user.image) {
+            avatarDiv.innerHTML = `<img src="${user.image}" alt="Avatar">`;
+          } else {
+            avatarDiv.textContent = user.nama.charAt(0).toUpperCase();
+          }
+
+          // Populate update form
+          document.getElementById('updateNama').value = user.nama;
+          document.getElementById('updateImage').value = user.image || '';
+
+          // Show dashboard
+          document.getElementById('loadingScreen').classList.add('hidden');
+          document.getElementById('dashboardContent').classList.remove('hidden');
+        } else {
+          // Token mungkin expired, coba refresh
+          await refreshToken();
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Gagal memuat data user');
+        localStorage.clear();
+        window.location.href = 'login.html';
+      }
+    }
+
+    // Refresh token
+    async function refreshToken() {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/api/users/refresh-token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ refreshToken })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          localStorage.setItem('accessToken', data.data.accessToken);
+          window.location.reload();
+        } else {
+          localStorage.clear();
+          window.location.href = 'login.html';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        localStorage.clear();
+        window.location.href = 'login.html';
+      }
+    }
+
+    // Handle logout
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try {
+        await fetch(`${API_URL}/api/users/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+
+        localStorage.clear();
+        window.location.href = 'login.html';
+      } catch (error) {
+        console.error('Error:', error);
+        localStorage.clear();
+        window.location.href = 'login.html';
+      }
+    });
+
+    // Handle update profile
+    document.getElementById('updateProfileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const nama = document.getElementById('updateNama').value;
+      const image = document.getElementById('updateImage').value;
+
+      try {
+        const response = await fetch(`${API_URL}/api/users/profile`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ nama, image })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          alert('Profile berhasil diupdate!');
+          loadUserData();
+        } else {
+          alert(data.message || 'Gagal update profile');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Terjadi kesalahan');
+      }
+    });
+
+    // Handle change password
+    document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const oldPassword = document.getElementById('oldPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+      if (newPassword !== confirmNewPassword) {
+        showPasswordAlert('Password baru dan konfirmasi tidak sama', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/api/users/change-password`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ oldPassword, newPassword })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showPasswordAlert('Password berhasil diubah!', 'success');
+          document.getElementById('changePasswordForm').reset();
+        } else {
+          showPasswordAlert(data.message || 'Gagal ubah password', 'error');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showPasswordAlert('Terjadi kesalahan', 'error');
+      }
+    });
+
+    function showPasswordAlert(message, type) {
+      const alertContainer = document.getElementById('changePasswordAlert');
+      alertContainer.innerHTML = `
+        <div class="alert alert-${type}">
+          ${message}
+        </div>
+      `;
+
+      setTimeout(() => {
+        alertContainer.innerHTML = '';
+      }, 5000);
+    }
+
+    // Load data on page load
+    loadUserData();
+  </script>
+</body>
+</html>

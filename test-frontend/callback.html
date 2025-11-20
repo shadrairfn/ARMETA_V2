@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Processing Login...</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="loading">
+    <h2>Memproses login...</h2>
+    <p>Mohon tunggu sebentar</p>
+  </div>
+
+  <script>
+    // Parse URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const accessToken = urlParams.get('accessToken');
+    const refreshToken = urlParams.get('refreshToken');
+
+    if (accessToken && refreshToken) {
+      // Save tokens to localStorage
+      localStorage.setItem('accessToken', accessToken);
+
+      // Fetch user data
+      fetch('http://localhost:3000/api/users/me', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          localStorage.setItem('user', JSON.stringify(data.data.user));
+          window.location.href = 'dashboard.html';
+        } else {
+          alert('Gagal memuat data user');
+          window.location.href = 'login.html';
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Terjadi kesalahan');
+        window.location.href = 'login.html';
+      });
+    } else {
+      // No tokens, redirect to login
+      alert('Login gagal. Silakan coba lagi.');
+      window.location.href = 'login.html';
+    }
+  </script>
+</body>
+</html>

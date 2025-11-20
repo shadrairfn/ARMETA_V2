@@ -1,0 +1,72 @@
+// app.js
+import express from "express";
+import session from "express-session";
+import cors from "cors";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+
+// ✅ Load konfigurasi Passport (strategy Google, serialize, deserialize)
+import "./config/passport.js";
+import passport from "passport";
+
+import authRoutes from "./routes/googleAuth.js";
+import userRoutes from "./routes/userRoutes.js";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+
+// ====== Middleware dasar ======
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  console.log(`🌐 ${req.method} ${req.url}`);
+  next();
+});
+
+// ====== Static files ======
+const publicPath = path.join(__dirname, "..", "test-frontend");
+console.log("📁 Serving static files from:", publicPath);
+app.use(express.static(publicPath));
+
+// ====== Session (Wajib sebelum passport.session) ======
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "armeta-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false, // true kalau sudah pakai HTTPS (production)
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  })
+);
+
+// ====== Passport ======
+app.use(passport.initialize());
+app.use(passport.session());
+
+// ====== Routes ======
+app.use("/auth", authRoutes);
+app.use("/api/users", userRoutes);
+
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "ARMETA API Server is running",
+    version: "1.0.0",
+  });
+});
+
+// // 404 & Error handler
+// app.use(notFoundHandler);
+// app.use(errorHandler);
+
+export default app;
