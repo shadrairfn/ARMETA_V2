@@ -22,7 +22,6 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// ====== Middleware dasar ======
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -32,29 +31,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// ====== Static files ======
 const publicPath = path.join(__dirname, "..", "test-frontend");
 console.log("📁 Serving static files from:", publicPath);
 app.use(express.static(publicPath));
 
-// ====== Session (Wajib sebelum passport.session) ======
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "armeta-secret-key",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // true kalau sudah pakai HTTPS (production)
+      secure: false, 
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
-// ====== Passport ======
 app.use(passport.initialize());
 app.use(passport.session());
 
-// ====== Routes ======
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/ulasan", ulasanRoutes);

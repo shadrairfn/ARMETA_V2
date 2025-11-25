@@ -1,6 +1,12 @@
 import {
     createUlasan,
     getAllUlasan,
+    likeUlasan,
+    bookmarkUlasan,
+    unLikeUlasan,
+    unBookmarkUlasan,
+    getBookmarkUlasan,
+    getLikeUlasan,
     searchSimilarUlasan
 } from "../controllers/ulasanController.js";
 import express from "express";
@@ -9,7 +15,6 @@ import upload from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
-// Create new ulasan with file uploads
 router.post(
     "/createUlasan",
     requireAuth,
@@ -17,18 +22,52 @@ router.post(
     createUlasan
 );
 
-// Search similar ulasan using vector similarity
 router.post(
     "/search",
     requireAuth,
     searchSimilarUlasan
 );
 
-// Get all ulasan
 router.get(
     "/getUlasan",
     requireAuth,
     getAllUlasan
+);
+
+router.post(
+    "/likeUlasan",
+    requireAuth,
+    likeUlasan
+);
+
+router.post(
+    "/bookmarkUlasan",
+    requireAuth,
+    bookmarkUlasan
+);
+
+router.delete(
+    "/likeUlasan",
+    requireAuth,
+    unLikeUlasan
+);
+
+router.delete(
+    "/bookmarkUlasan",
+    requireAuth,
+    unBookmarkUlasan
+);
+
+router.get(
+    "/likeUlasan",
+    requireAuth,
+    getLikeUlasan
+);
+
+router.get(
+    "/bookmarkUlasan",
+    requireAuth,
+    getBookmarkUlasan
 );
 
 export default router;

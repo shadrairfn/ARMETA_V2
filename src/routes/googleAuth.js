@@ -15,7 +15,7 @@ const router = express.Router();
 
 // Step 1: Redirect ke Google
 router.get(
-  "/google",
+  "/google/login",
   (req, res, next) => {
     console.log("\n==========================================");
     console.log("➡️  /auth/google HIT");
@@ -62,9 +62,15 @@ router.get(
         .returning();
 
       // Redirect ke frontend callback.html dengan query token
-      const callbackUrl = `/callback.html?accessToken=${encodeURIComponent(
-        accessToken
-      )}&refreshToken=${encodeURIComponent(refreshToken)}`;
+      // const callbackUrl = `/callback.html?accessToken=${encodeURIComponent(
+      //   accessToken
+      // )}&refreshToken=${encodeURIComponent(refreshToken)}`;
+
+      // Redirect ke frontend React
+      const callbackUrl = `http://172.24.128.1:3001/auth/callback?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
+
+      res.redirect(callbackUrl);
+
 
       console.log("🔁 Redirecting to:", callbackUrl);
       res.redirect(callbackUrl);

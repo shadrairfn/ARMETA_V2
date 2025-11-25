@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
-import { ulasan } from "../db/schema/schema.js";
+import { ulasan, users, likeUlasanMatkul} from "../db/schema/schema.js";
 import { eq, sql } from "drizzle-orm";
 
 import {
@@ -29,13 +29,12 @@ import { generateEmbedding } from "../service/vectorizationService.js";
 const createUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
 
-  const { id_matkul, id_dosen, textUlasan } = req.body;
+  const { id_matkul, id_dosen, id_reply, judulUlasan, textUlasan } = req.body;
 
-  if (!id_matkul || !id_dosen && !textUlasan) {
+  if ((!id_matkul || !id_dosen) && id_reply &&!textUlasan && !judulUlasan) {
     throw new BadRequestError("id_matkul atau id_dosen, dan textUlasan wajib diisi");
   }
-
-  // Upload files (if any)
+  
   const fileUploaded = req.files || [];
   const fileLocalLinks = [];
   for (const file of fileUploaded) {
@@ -43,32 +42,31 @@ const createUlasan = asyncHandler(async (req, res) => {
     fileLocalLinks.push(fileUrl);
   }
 
-  // Generate embedding vector from text using Voyage AI
   console.log("🔄 Generating embedding for ulasan text...");
   const embeddingVector = await generateEmbedding(textUlasan);
   console.log("✅ Embedding generated successfully, dimension:", embeddingVector.length);
 
-  // Convert vector to PostgreSQL-compatible string format
   const vectorString = `[${embeddingVector.join(',')}]`;
   const filesJson = JSON.stringify(fileLocalLinks);
 
-  // Handle null values properly
-  const matkulValue = id_matkul ? parseInt(id_matkul) : null;
-  const dosenValue = id_dosen ? parseInt(id_dosen) : null;
+  const matkulValue = (id_matkul && id_matkul.toString().trim() !== '') ? parseInt(id_matkul) : null;
+  const dosenValue = (id_dosen && id_dosen.toString().trim() !== '') ? parseInt(id_dosen) : null;
+  const replyValue = (id_reply && id_reply.toString().trim() !== '') ? parseInt(id_reply) : null;
 
-  console.log("📊 Debug insert values:", {
+  console.log("Debug insert values:", {
     userId,
     id_matkul: matkulValue,
     id_dosen: dosenValue,
+    id_ulasan_reply: replyValue,
     textUlasan: textUlasan.substring(0, 50),
-    filesCount: fileLocalLinks.length,
+    judulUlasan: judulUlasan.substring(0, 50),
+    files: fileLocalLinks.length,
     vectorLength: vectorString.length
   });
-
-  // Use sql tagged template from Drizzle (safe from SQL injection)
+  
   const result = await db.execute(
-    sql`INSERT INTO ulasan (id_user, id_matkul, id_dosen, teks_ulasan, files, vectorize_ulasan)
-        VALUES (${userId}, ${matkulValue}, ${dosenValue}, ${textUlasan}, ${filesJson}::jsonb, ${vectorString}::vector)
+    sql`INSERT INTO ulasan (id_user, id_matkul, id_dosen, id_ulasan_reply, judul_ulasan, teks_ulasan, files, vectorize_ulasan)
+        VALUES (${userId}, ${matkulValue}, ${dosenValue}, ${replyValue}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
         RETURNING *`
   );
 
@@ -87,6 +85,162 @@ const getAllUlasan = asyncHandler(async (req, res) => {
         message : "Success get all ulasan"
     });
 });
+
+const likeUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_ulasan } = req.body;
+
+  if (!id_ulasan) {
+    throw new BadRequestError("id_ulasan wajib diisi");
+  }
+
+  const existingLike = await db.execute(
+    sql`SELECT * FROM like_ulasan_matkul
+        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+  );
+  
+  if (existingLike.rows.length >= 1) {
+    throw new BadRequestError("User sudah like ulasan ini");
+  }
+
+  const result = await db.execute(
+    sql`INSERT INTO like_ulasan_matkul (id_user, id_ulasan)
+        VALUES (${userId}, ${id_ulasan})
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data : result.rows[0],
+    status : true,
+    message : "Success like ulasan"
+  })
+})
+
+const bookmarkUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_ulasan } = req.body;
+
+  if (!id_ulasan) {
+    throw new BadRequestError("id_ulasan wajib diisi");
+  }
+
+  const existingBokmark = await db.execute(
+    sql`SELECT * FROM bookmark_ulasan
+        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+  );
+  
+  if (existingBokmark.rows.length >= 1) {
+    throw new BadRequestError("User sudah bookmark ulasan ini");
+  }
+
+  const result = await db.execute(
+    sql`INSERT INTO bookmark_ulasan (id_user, id_ulasan)
+        VALUES (${userId}, ${id_ulasan})
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data : result.rows[0],
+    status : true,
+    message : "Success repost ulasan"
+  })
+})
+
+const unLikeUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_ulasan } = req.body;
+
+  if (!id_ulasan) {
+    throw new BadRequestError("id_ulasan wajib diisi");
+  }
+
+  const existingLike = await db.execute(
+    sql`SELECT * FROM like_ulasan_matkul
+        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+  );
+  
+  if (existingLike.rows.length == 0) {
+    throw new BadRequestError("User belum bookmark ulasan ini");
+  }
+
+  const result = await db.execute(
+    sql`DELETE FROM like_ulasan_matkul
+        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data : result.rows[0],
+    status : true,
+    message : "Success unlike ulasan"
+  })
+})
+
+const unBookmarkUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_ulasan } = req.body;
+
+  if (!id_ulasan) {
+    throw new BadRequestError("id_ulasan wajib diisi");
+  }
+
+  const existingBokmark = await db.execute(
+    sql`SELECT * FROM bookmark_ulasan
+        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+  );
+  
+  if (existingBokmark.rows.length == 0) {
+    throw new BadRequestError("User belum bookmark ulasan ini");
+  }
+
+  const result = await db.execute(
+    sql`DELETE FROM bookmark_ulasan
+        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data : result.rows[0],
+    status : true,
+    message : "Success unlike ulasan"
+  })
+})
+
+const getLikeUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const existingLike = await db.execute(
+    sql`
+      SELECT u.*
+      FROM like_ulasan_matkul l
+      JOIN ulasan u ON l.id_ulasan = u.id_ulasan
+      WHERE l.id_user = ${userId}
+    `
+  );
+  
+  return res.status(200).json({
+    data : existingLike.rows,
+    status : true,
+    message : "Success get all ulasan"
+  })
+});
+
+const getBookmarkUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const existingBookmark = await db.execute(
+    sql`
+      SELECT u.*
+      FROM bookmark_ulasan l
+      JOIN ulasan u ON l.id_ulasan = u.id_ulasan
+      WHERE l.id_user = ${userId}
+    `
+  );
+  
+  return res.status(200).json({
+    data : existingBookmark.rows,
+    status : true,
+    message : "Success get all ulasan"
+  })
+})
 
 /**
  * Search similar ulasan using vector similarity
@@ -130,4 +284,13 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
   });
 });
 
-export { createUlasan, getAllUlasan, searchSimilarUlasan };
+export { 
+  createUlasan, 
+  getAllUlasan, 
+  likeUlasan, 
+  bookmarkUlasan, 
+  unLikeUlasan, 
+  unBookmarkUlasan,
+  getBookmarkUlasan,
+  getLikeUlasan, 
+  searchSimilarUlasan };
