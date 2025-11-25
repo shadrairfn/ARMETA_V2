@@ -29,9 +29,9 @@ import { generateEmbedding } from "../service/vectorizationService.js";
 const createUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
 
-  const { id_matkul, id_dosen, id_reply, judulUlasan, textUlasan } = req.body;
+  let { idMatkul, idDosen, idReply, judulUlasan, textUlasan } = req.body;
 
-  if ((!id_matkul || !id_dosen) && id_reply &&!textUlasan && !judulUlasan) {
+  if ((!idMatkul || !idDosen) && idReply &&!textUlasan && !judulUlasan) {
     throw new BadRequestError("id_matkul atau id_dosen, dan textUlasan wajib diisi");
   }
   
@@ -49,15 +49,21 @@ const createUlasan = asyncHandler(async (req, res) => {
   const vectorString = `[${embeddingVector.join(',')}]`;
   const filesJson = JSON.stringify(fileLocalLinks);
 
-  const matkulValue = (id_matkul && id_matkul.toString().trim() !== '') ? parseInt(id_matkul) : null;
-  const dosenValue = (id_dosen && id_dosen.toString().trim() !== '') ? parseInt(id_dosen) : null;
-  const replyValue = (id_reply && id_reply.toString().trim() !== '') ? parseInt(id_reply) : null;
+  if (idMatkul == '') {
+    idMatkul = null;
+  }
+  if (idDosen == '') {
+    idDosen = null;
+  }
+  if (idReply == '') {
+    idReply = null;
+  }
 
   console.log("Debug insert values:", {
     userId,
-    id_matkul: matkulValue,
-    id_dosen: dosenValue,
-    id_ulasan_reply: replyValue,
+    id_matkul: idMatkul,
+    id_dosen: idDosen,
+    id_ulasan_reply: idReply,
     textUlasan: textUlasan.substring(0, 50),
     judulUlasan: judulUlasan.substring(0, 50),
     files: fileLocalLinks.length,
@@ -66,7 +72,7 @@ const createUlasan = asyncHandler(async (req, res) => {
   
   const result = await db.execute(
     sql`INSERT INTO ulasan (id_user, id_matkul, id_dosen, id_ulasan_reply, judul_ulasan, teks_ulasan, files, vectorize_ulasan)
-        VALUES (${userId}, ${matkulValue}, ${dosenValue}, ${replyValue}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
+        VALUES (${userId}, ${idMatkul}, ${idDosen}, ${idReply}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
         RETURNING *`
   );
 

@@ -1,10 +1,10 @@
-import { pgTable, serial, varchar, integer, timestamp, text, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, timestamp, text, primaryKey } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { vector, jsonb } from "drizzle-orm/pg-core";
 
 
 export const users = pgTable("users", {
-  id_user: serial("id_user").primaryKey().notNull(),
+  id_user: uuid("id_user").defaultRandom().primaryKey().notNull(),
   nama: varchar("nama", { length: 128 }).notNull(),
   email: varchar("email", { length: 128 }).notNull().unique(),
   image: varchar("image", { length: 255 }),
@@ -20,7 +20,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 export const dosen = pgTable("dosen", {
-  id_dosen: serial("id_dosen").primaryKey().notNull(),
+  id_dosen: uuid("id_dosen").defaultRandom().primaryKey().notNull(),
   nama_dosen: varchar("nama_dosen", { length: 128 }).notNull(),
   npm: varchar("npm", { length: 50 }),
   email: varchar("email", { length: 128 }),
@@ -35,7 +35,7 @@ export const dosenRelations = relations(dosen, ({ many }) => ({
 }));
 
 export const mataKuliah = pgTable("mata_kuliah", {
-  id_matkul: serial("id_matkul").primaryKey().notNull(),
+  id_matkul: uuid("id_matkul").defaultRandom().primaryKey().notNull(),
   kode_matkul: varchar("kode_matkul", { length: 50 }).notNull(),
   nama_matkul: varchar("nama_matkul", { length: 128 }).notNull(),
   semester: integer("semester"),
@@ -47,11 +47,11 @@ export const mataKuliahRelations = relations(mataKuliah, ({ many }) => ({
 }));
 
 export const ulasan = pgTable("ulasan", {
-  id_ulasan: serial("id_ulasan").primaryKey(),
-  id_user: integer("id_user").notNull().references(() => users.id_user),
-  id_matkul: integer("id_matkul").references(() => mataKuliah.id_matkul),
-  id_dosen: integer("id_dosen").references(() => dosen.id_dosen),
-  id_ulasan_reply: integer("id_ulasan_reply").references(() => ulasan.id_ulasan),
+  id_ulasan: uuid("id_ulasan").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").notNull().references(() => users.id_user),
+  id_matkul: uuid("id_matkul").references(() => mataKuliah.id_matkul, { onDelete: "cascade" }),
+  id_dosen: uuid("id_dosen").references(() => dosen.id_dosen, { onDelete: "cascade" }),
+  id_ulasan_reply: uuid("id_ulasan_reply").references(() => ulasan.id_ulasan, { onDelete: "cascade" }),
   files: jsonb("files").$type/** @type {string[]} */(),
   judul_ulasan: varchar("judul_ulasan", { length: 128 }).notNull(),
   teks_ulasan: text("teks_ulasan").notNull(),
@@ -69,9 +69,9 @@ export const ulasanRelations = relations(ulasan, ({ one, many }) => ({
 }));
 
 export const bookmarkUlasan = pgTable("bookmark_ulasan", {
-  id_bookmark: serial("id_bookmark").primaryKey().notNull(),
-  id_user: integer("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
-  id_ulasan: integer("id_ulasan").references(() => ulasan.id_ulasan, { onDelete: "cascade" }).notNull(),
+  id_bookmark: uuid("id_bookmark").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  id_ulasan: uuid("id_ulasan").references(() => ulasan.id_ulasan, { onDelete: "cascade" }).notNull(),
 });
 
 export const bookmarkUlasanRelations = relations(bookmarkUlasan, ({ one }) => ({
@@ -80,11 +80,11 @@ export const bookmarkUlasanRelations = relations(bookmarkUlasan, ({ one }) => ({
 }));
 
 export const likeUlasanMatkul = pgTable("like_ulasan_matkul", {
-  id_like: serial("id_like").primaryKey().notNull(),
-  id_user: integer("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
-  id_dosen: integer("id_dosen").references(() => dosen.id_dosen, { onDelete: "cascade" }),
-  id_ulasan: integer("id_ulasan").references(() => ulasan.id_ulasan, { onDelete: "cascade" }),
-  id_matkul: integer("id_matkul").references(() => mataKuliah.id_matkul, { onDelete: "cascade" }),
+  id_like: uuid("id_like").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  id_dosen: uuid("id_dosen").references(() => dosen.id_dosen, { onDelete: "cascade" }),
+  id_ulasan: uuid("id_ulasan").references(() => ulasan.id_ulasan, { onDelete: "cascade" }),
+  id_matkul: uuid("id_matkul").references(() => mataKuliah.id_matkul, { onDelete: "cascade" }),
 });
 
 export const likeUlasanMatkulRelations = relations(likeUlasanMatkul, ({ one }) => ({
@@ -95,10 +95,10 @@ export const likeUlasanMatkulRelations = relations(likeUlasanMatkul, ({ one }) =
 }));
 
 export const report = pgTable("report", {
-  id_like: serial("id_like").primaryKey().notNull(),
-  id_user: integer("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
-  id_dosen: integer("id_dosen").references(() => dosen.id_dosen, { onDelete: "cascade" }),
-  id_ulasan: integer("id_ulasan").references(() => ulasan.id_ulasan, { onDelete: "cascade" }),
+  id_report: uuid("id_report").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  id_dosen: uuid("id_dosen").references(() => dosen.id_dosen, { onDelete: "cascade" }),
+  id_ulasan: uuid("id_ulasan").references(() => ulasan.id_ulasan, { onDelete: "cascade" }),
   jenis_laporan: varchar("jenis_laporan", { length: 100 }),
   deskripsi: text("deskripsi"),
   status: varchar("status", { length: 50 }).default("pending"),
@@ -110,3 +110,20 @@ export const reportRelations = relations(report, ({ one }) => ({
   dosen: one(dosen, { fields: [report.id_dosen], references: [dosen.id_dosen] }),
   ulasan: one(ulasan, { fields: [report.id_ulasan], references: [ulasan.id_ulasan] }),
 }));
+
+export const forumUlasan = pgTable("forum_ulasan", {
+  id_forum: uuid("id_forum").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  id_matkul: uuid("id_matkul").references(() => mataKuliah.id_matkul, { onDelete: "cascade" }).notNull(),
+  judul_forum: text("judul_forum").notNull(),
+  deskripsi: text("teks_forum"),
+  created_at: timestamp("created_at").defaultNow(),
+})
+
+export const chatbotHistory = pgTable("chatbot_history", {
+  id_chatbot: uuid("id_chatbot").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  created_at: timestamp("created_at").defaultNow(),
+})
