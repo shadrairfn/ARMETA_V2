@@ -29,9 +29,9 @@ import { generateEmbedding } from "../service/vectorizationService.js";
 const createUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
 
-  let { idMatkul, idDosen, idReply, judulUlasan, textUlasan } = req.body;
+  let { idMatkul, idDosen, idReply, idForum, judulUlasan, textUlasan } = req.body;
 
-  if ((!idMatkul || !idDosen) && idReply &&!textUlasan && !judulUlasan) {
+  if ((!idMatkul || !idDosen || !idForum) && idReply &&!textUlasan && !judulUlasan) {
     throw new BadRequestError("id_matkul atau id_dosen, dan textUlasan wajib diisi");
   }
   
@@ -68,6 +68,7 @@ const createUlasan = asyncHandler(async (req, res) => {
     id_matkul: idMatkul,
     id_dosen: idDosen,
     id_ulasan_reply: idReply,
+    id_forum: idForum,
     textUlasan: textUlasan.substring(0, 50),
     judulUlasan: judulUlasan.substring(0, 50),
     files: fileLocalLinks.length,
@@ -75,8 +76,8 @@ const createUlasan = asyncHandler(async (req, res) => {
   });
   
   const result = await db.execute(
-    sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, title, body, files, vectorize)
-        VALUES (${userId}, ${idMatkul}, ${idDosen}, ${idReply}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
+    sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, id_forum, title, body, files, vectorize)
+        VALUES (${userId}, ${idMatkul}, ${idDosen}, ${idReply}, ${idForum}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
         RETURNING *`
   );
 

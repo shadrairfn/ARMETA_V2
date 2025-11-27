@@ -16,6 +16,8 @@ import authRoutes from "./routes/googleAuth.js";
 import userRoutes from "./routes/userRoutes.js";
 import ulasanRoutes from "./routes/ulasanRoutes.js";
 import chatbotRoutes from "./routes/chatbotRoutes.js";
+import forumRoutes from "./routes/forumRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -55,6 +57,8 @@ app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/ulasan", ulasanRoutes);
 app.use("/api/chatbot", chatbotRoutes);
+app.use("/api/forum", forumRoutes);
+app.use("/api/reports", reportRoutes);
 
 app.get("/", (req, res) => {
   res.json({

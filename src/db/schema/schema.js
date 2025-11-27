@@ -77,6 +77,7 @@ export const reviews = pgTable("reviews", {
   id_subject: uuid("id_subject").references(() => subjects.id_subject, { onDelete: "cascade" }),
   id_lecturer: uuid("id_lecturer").references(() => lecturers.id_lecturer, { onDelete: "cascade" }),
   id_reply: uuid("id_reply").references(() => reviews.id_review, { onDelete: "cascade" }),
+  id_forum: uuid("id_forum").references(() => reviewsForum.id_forum, { onDelete: "cascade" }),
   files: jsonb("files").$type/** @type {string[]} */(),
   title: varchar("title", { length: 128 }).notNull(),
   body: text("body"),
@@ -123,7 +124,6 @@ export const reports = pgTable("reports", {
   id_review: uuid("id_review").references(() => reviews.id_review, { onDelete: "cascade" }),
   type: reportTypeEnum("report_type").notNull(),
   body: text("body"),
-  description: text("description"),
   status: reportStatusEnum("report_status").notNull().default("Pending"),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
@@ -142,6 +142,7 @@ export const reviewsForum = pgTable("reviews_forum", {
   title: text("title").notNull(),
   description: text("description"),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 })
 
 export const chatbotHistory = pgTable("chatbot_history", {
