@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
-import { ulasan, users, likeUlasanMatkul} from "../db/schema/schema.js";
-import { eq, sql } from "drizzle-orm";
+import { reviews, users, likeReviews, bookmarkReviews } from "../db/schema/schema.js";
+import { eq, sql, and } from "drizzle-orm";
 
 import {
   generateAccessToken,
@@ -44,9 +44,13 @@ const createUlasan = asyncHandler(async (req, res) => {
 
   console.log("🔄 Generating embedding for ulasan text...");
   const embeddingVector = await generateEmbedding(textUlasan);
+  
   console.log("✅ Embedding generated successfully, dimension:", embeddingVector.length);
 
   const vectorString = `[${embeddingVector.join(',')}]`;
+  console.log(`VECTORIZE DATA TYPE: ${typeof vectorString}`);
+  console.log(`VECTORIZE DATA: ${vectorString}`);
+  
   const filesJson = JSON.stringify(fileLocalLinks);
 
   if (idMatkul == '') {
@@ -71,7 +75,7 @@ const createUlasan = asyncHandler(async (req, res) => {
   });
   
   const result = await db.execute(
-    sql`INSERT INTO ulasan (id_user, id_matkul, id_dosen, id_ulasan_reply, judul_ulasan, teks_ulasan, files, vectorize_ulasan)
+    sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, title, body, files, vectorize)
         VALUES (${userId}, ${idMatkul}, ${idDosen}, ${idReply}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
         RETURNING *`
   );
@@ -83,8 +87,102 @@ const createUlasan = asyncHandler(async (req, res) => {
   });
 });
 
+const editUlasan = asyncHandler(async (req, res) => {
+  // To be implemented
+  const userId = req.user.id_user;
+  let { id_review, title, body } = req.body;
+
+  const [oldReview] = await db
+  .select()
+  .from(reviews)
+  .where(
+    and(
+      eq(reviews.id_user, userId),
+      eq(reviews.id_review, id_review)
+    )
+  );
+
+  if (id_review != oldReview.id_review) {
+    throw new BadRequestError("id_review tidak sama");
+  }
+
+  console.log(`BODY BEFORE: ${body}`);
+
+  if (!oldReview) throw new NotFoundError("Review tidak ditemukan");
+
+  // Upload file bila ada
+  let profileUrl = oldReview.files;
+  console.log("Profil URL: ", profileUrl);
+  console.log("Profil URL tipe: ", typeof profileUrl);
+  console.log("File lama: ", oldReview.files);
+  console.log("File lama tipe: ", typeof oldReview.files);
+  console.log("File sekarang: ", req.files);
+
+  if (req.files.length > 0) {
+    const fileUploaded = req.files || [];
+    const fileLocalLinks = [];
+    for (const file of fileUploaded) {
+      const fileUrl = await uploadToFirebase(file, "ulasan");
+      fileLocalLinks.push(fileUrl);
+    }
+    const filesJson = JSON.stringify(fileLocalLinks);
+    profileUrl = filesJson;
+  }
+
+  let vectorString = oldReview.vectorize;
+  console.log("VECTORIZE DATA TYPE ONE:", typeof vectorString);
+
+  if (body) {
+      console.log("🔄 Generating embedding for ulasan text...");
+      const embeddingVector = await generateEmbedding(body);
+
+      if (!Array.isArray(embeddingVector)) {
+          throw new Error("generateEmbedding did not return an array.");
+      }
+
+      console.log("✅ Embedding generated successfully, dimension:", embeddingVector.length);
+      
+      vectorString = embeddingVector
+      console.log("VECTORIZE DATA TYPE TWO:", typeof vectorString);
+  }
+  if (!title || title === "") {
+    title = oldReview.title;
+  }
+
+  if (!body || body === "") {
+    body = oldReview.body;
+  }
+
+  console.log(`BODY AFTER: ${body}`);
+
+  const updateData = {};
+
+  if (title) updateData.title = title;
+  if (body) updateData.body = body;
+  if (profileUrl) updateData.files = profileUrl;
+  if (vectorString) updateData.vectorize = vectorString;
+
+  updateData.updated_at = sql`NOW()`;
+
+  console.log("UPDATE DATA TYPE:", typeof updateData.vectorize);
+  console.log("UPDATE DATA:", updateData);
+  
+
+  const [updatedUlasan] = await db
+    .update(reviews)
+    .set(updateData)
+    .where(eq(reviews.id_review, id_review))
+    .returning();
+
+  return res.status(200).json({
+    data : updatedUlasan,
+    status : true,
+    message : "Success update ulasan"
+  });
+});
+
 const getAllUlasan = asyncHandler(async (req, res) => {
-  const dataUlasan = await await db.select().from(ulasan);
+  const dataUlasan = await db.select().from(reviews);
   return res.status(200).json({
         data : dataUlasan,
         status : true,
@@ -94,24 +192,24 @@ const getAllUlasan = asyncHandler(async (req, res) => {
 
 const likeUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
-  const { id_ulasan } = req.body;
+  const { id_review } = req.body;
 
-  if (!id_ulasan) {
-    throw new BadRequestError("id_ulasan wajib diisi");
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
   }
 
   const existingLike = await db.execute(
-    sql`SELECT * FROM like_ulasan_matkul
-        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+    sql`SELECT * FROM like_reviews
+        WHERE id_user = ${userId} AND id_review = ${id_review}`
   );
-  
+
   if (existingLike.rows.length >= 1) {
     throw new BadRequestError("User sudah like ulasan ini");
   }
 
   const result = await db.execute(
-    sql`INSERT INTO like_ulasan_matkul (id_user, id_ulasan)
-        VALUES (${userId}, ${id_ulasan})
+    sql`INSERT INTO like_reviews (id_user, id_review)
+        VALUES (${userId}, ${id_review})
         RETURNING *`
   );
 
@@ -124,24 +222,24 @@ const likeUlasan = asyncHandler(async (req, res) => {
 
 const bookmarkUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
-  const { id_ulasan } = req.body;
+  const { id_review } = req.body;
 
-  if (!id_ulasan) {
-    throw new BadRequestError("id_ulasan wajib diisi");
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
   }
 
   const existingBokmark = await db.execute(
-    sql`SELECT * FROM bookmark_ulasan
-        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+    sql`SELECT * FROM bookmark_reviews
+        WHERE id_user = ${userId} AND id_review = ${id_review}`
   );
-  
+
   if (existingBokmark.rows.length >= 1) {
     throw new BadRequestError("User sudah bookmark ulasan ini");
   }
 
   const result = await db.execute(
-    sql`INSERT INTO bookmark_ulasan (id_user, id_ulasan)
-        VALUES (${userId}, ${id_ulasan})
+    sql`INSERT INTO bookmark_reviews (id_user, id_review)
+        VALUES (${userId}, ${id_review})
         RETURNING *`
   );
 
@@ -154,24 +252,24 @@ const bookmarkUlasan = asyncHandler(async (req, res) => {
 
 const unLikeUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
-  const { id_ulasan } = req.body;
+  const { id_review } = req.body;
 
-  if (!id_ulasan) {
-    throw new BadRequestError("id_ulasan wajib diisi");
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
   }
 
   const existingLike = await db.execute(
-    sql`SELECT * FROM like_ulasan_matkul
-        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+    sql`SELECT * FROM like_reviews
+        WHERE id_user = ${userId} AND id_review = ${id_review}`
   );
-  
+
   if (existingLike.rows.length == 0) {
     throw new BadRequestError("User belum bookmark ulasan ini");
   }
 
   const result = await db.execute(
-    sql`DELETE FROM like_ulasan_matkul
-        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}
+    sql`DELETE FROM like_reviews
+        WHERE id_user = ${userId} AND id_review = ${id_review}
         RETURNING *`
   );
 
@@ -184,24 +282,24 @@ const unLikeUlasan = asyncHandler(async (req, res) => {
 
 const unBookmarkUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
-  const { id_ulasan } = req.body;
+  const { id_review } = req.body;
 
-  if (!id_ulasan) {
-    throw new BadRequestError("id_ulasan wajib diisi");
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
   }
 
   const existingBokmark = await db.execute(
-    sql`SELECT * FROM bookmark_ulasan
-        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}`
+    sql`SELECT * FROM bookmark_reviews
+        WHERE id_user = ${userId} AND id_review = ${id_review}`
   );
-  
+
   if (existingBokmark.rows.length == 0) {
     throw new BadRequestError("User belum bookmark ulasan ini");
   }
 
   const result = await db.execute(
-    sql`DELETE FROM bookmark_ulasan
-        WHERE id_user = ${userId} AND id_ulasan = ${id_ulasan}
+    sql`DELETE FROM bookmark_reviews
+        WHERE id_user = ${userId} AND id_review = ${id_review}
         RETURNING *`
   );
 
@@ -217,8 +315,8 @@ const getLikeUlasan = asyncHandler(async (req, res) => {
   const existingLike = await db.execute(
     sql`
       SELECT u.*
-      FROM like_ulasan_matkul l
-      JOIN ulasan u ON l.id_ulasan = u.id_ulasan
+      FROM like_reviews l
+      JOIN reviews u ON l.id_review = u.id_review
       WHERE l.id_user = ${userId}
     `
   );
@@ -235,8 +333,8 @@ const getBookmarkUlasan = asyncHandler(async (req, res) => {
   const existingBookmark = await db.execute(
     sql`
       SELECT u.*
-      FROM bookmark_ulasan l
-      JOIN ulasan u ON l.id_ulasan = u.id_ulasan
+      FROM bookmark_reviews l
+      JOIN reviews u ON l.id_review = u.id_review
       WHERE l.id_user = ${userId}
     `
   );
@@ -268,17 +366,17 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
   // Using raw SQL for pgvector similarity search
   const similarUlasan = await db.execute(
     `SELECT
-      u.id_ulasan,
+      u.id_review,
       u.id_user,
-      u.id_matkul,
-      u.id_dosen,
-      u.teks_ulasan,
+      u.id_subject,
+      u.id_lecturer,
+      u.title,
       u.files,
-      u.tanggal_upload,
-      (u.vectorize_ulasan <=> $1::vector) as distance,
-      (1 - (u.vectorize_ulasan <=> $1::vector)) as similarity
-    FROM ulasan u
-    ORDER BY u.vectorize_ulasan <=> $1::vector
+      u.created_at,
+      (u.vectorize <=> $1::vector) as distance,
+      (1 - (u.vectorize <=> $1::vector)) as similarity
+    FROM reviews u
+    ORDER BY u.vectorize <=> $1::vector
     LIMIT $2`,
     [JSON.stringify(queryEmbedding), limit]
   );
@@ -292,6 +390,7 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
 
 export { 
   createUlasan, 
+  editUlasan,
   getAllUlasan, 
   likeUlasan, 
   bookmarkUlasan, 

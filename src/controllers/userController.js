@@ -61,14 +61,14 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
     .where(eq(users.id_user, decoded.id_user))
     .limit(1);
 
-  if (!user || user.refreshToken !== refreshToken) {
+  if (!user || user.refresh_token !== refreshToken) {
     throw new TokenError("Refresh token tidak valid");
   }
 
   const newAccessToken = generateAccessToken({
     id_user: user.id_user,
     email: user.email,
-    nama: user.nama,
+    name: user.name,
   });
 
   return successResponse(res, 200, "Access token berhasil diperbarui", {
@@ -94,7 +94,7 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
     throw new NotFoundError("User tidak ditemukan");
   }
 
-  const { password: _, refreshToken: __, ...userWithoutSensitiveData } = user;
+  const { password: _, refresh_token: __, ...userWithoutSensitiveData } = user;
 
   return successResponse(res, 200, "User profile berhasil diambil", {
     user: userWithoutSensitiveData,
@@ -102,17 +102,40 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
 });
 
 
-const updateProfile = asyncHandler(async (req, res, next) => {
+const updateProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
-  const { nama, image } = req.body;
 
-  if (!nama && !image) {
+  let name = req.body?.name ?? null;
+
+  if (!name && !req.file) {
     throw new BadRequestError("Tidak ada data yang diupdate");
   }
 
-  const updateData = {};
-  if (nama) updateData.nama = nama;
-  if (image) updateData.image = image;
+  console.log("REQ BODY BEFORE:", req.body);
+  console.log("REQ FILE BEFORE:", req.file);
+
+  const [oldUser] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id_user, userId));
+
+  if (!oldUser) throw new NotFoundError("User tidak ditemukan");
+
+  // Upload file bila ada
+  let profileUrl = oldUser.image;
+  if (req.file) {
+    profileUrl = await uploadToFirebase(req.file, "profile_photos");
+  }
+
+  // fallback name
+  if (!name || name === "") {
+    name = oldUser.name;
+  }
+
+  console.log("REQ BODY AFTER:", req.body);
+  console.log("REQ FILE AFTER:", req.file);
+
+  const updateData = { name, image: profileUrl };
 
   const [updatedUser] = await db
     .update(users)
@@ -120,44 +143,8 @@ const updateProfile = asyncHandler(async (req, res, next) => {
     .where(eq(users.id_user, userId))
     .returning();
 
-  if (!updatedUser) {
-    throw new NotFoundError("User tidak ditemukan");
-  }
-
-  const { password: _, refreshToken: __, ...userWithoutSensitiveData } =
-    updatedUser;
-
   return successResponse(res, 200, "Profile berhasil diupdate", {
-    user: userWithoutSensitiveData,
-  });
-});
-
-const updateProfilePhoto = asyncHandler(async (req, res) => {
-  if (!req.file) {
-    throw new BadRequestError("Tidak ada file yang diupload");
-  }
-
-  const userId = req.user.id_user;
-
-  // Upload ke Firebase Storage
-  const profileUrl = await uploadToFirebase(req.file, "profile_photos");
-
-  // Update ke database
-  const [updated] = await db
-    .update(users)
-    .set({ image: profileUrl })
-    .where(eq(users.id_user, userId))
-    .returning();
-
-  if (!updated) {
-    throw new NotFoundError("User tidak ditemukan");
-  }
-
-  const { password: _, refreshToken: __, ...safeUser } = updated;
-
-  return successResponse(res, 200, "Foto profil berhasil diperbarui", {
-    user: safeUser,
-    imageUrl: profileUrl,
+    user: updatedUser,
   });
 });
 
@@ -165,6 +152,5 @@ export {
   logout,
   refreshAccessToken,
   getCurrentUser,
-  updateProfile,
-  updateProfilePhoto
+  updateProfile
 };

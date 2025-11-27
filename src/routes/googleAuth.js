@@ -29,30 +29,33 @@ router.get(
 router.get(
   "/google/callback",
   (req, res, next) => {
+    console.log("\n🔥 CALLBACK HIT:", req.query);
     next();
   },
-  passport.authenticate("google", {
-    failureRedirect: "/login.html",
-    session: true, 
-  }),
+  passport.authenticate("google", { failureRedirect: "/login.html", session: true }),
+
   async (req, res) => {
+    console.log("\n🎯 AFTER PASSPORT AUTH:", req.user);
+
+    if (!req.user) {
+      console.log("❌ ERROR: req.user is NULL");
+      return res.redirect("/login.html");
+    }
+
     try {
-      console.log("req.user:", req.user);
-
-      if (!req.user || !req.user.id_user) {
-        console.error("req.user tidak ada atau id_user tidak ditemukan");
-        return res.redirect("/login.html");
-      }
-
-      // Generate JWT tokens
       const accessToken = generateAccessToken({
         id_user: req.user.id_user,
         email: req.user.email,
-        nama: req.user.nama,
+        name: req.user.name,
       });
 
       const refreshToken = generateRefreshToken({
         id_user: req.user.id_user,
+      });
+
+      console.log("\n📝 UPDATE REFRESH TOKEN", {
+        userId: req.user.id_user,
+        refreshToken,
       });
 
       const updated = await db
@@ -61,24 +64,21 @@ router.get(
         .where(eq(users.id_user, req.user.id_user))
         .returning();
 
-      // Redirect ke frontend callback.html dengan query token
-      // const callbackUrl = `/callback.html?accessToken=${encodeURIComponent(
-      //   accessToken
-      // )}&refreshToken=${encodeURIComponent(refreshToken)}`;
+      console.log("📌 UPDATED USER:", updated);
 
-      // Redirect ke frontend React
-      const callbackUrl = `http://172.24.128.1:3001/auth/callback?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
+      const callbackUrl =
+        `http://172.24.128.1:3001/auth/callback` +
+        `?accessToken=${encodeURIComponent(accessToken)}` +
+        `&refreshToken=${encodeURIComponent(refreshToken)}`;
 
-      res.redirect(callbackUrl);
-
-
-      console.log("🔁 Redirecting to:", callbackUrl);
-      res.redirect(callbackUrl);
-    } catch (error) {
-      console.error("Error in Google callback handler:", error);
-      res.redirect("/login.html");
+      console.log("\n🔁 REDIRECTING TO:", callbackUrl);
+      return res.redirect(callbackUrl);
+    } catch (err) {
+      console.log("\n❌ CALLBACK ERROR:", err);
+      return res.redirect("/login.html");
     }
   }
 );
+
 
 export default router;

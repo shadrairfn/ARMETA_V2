@@ -1,5 +1,6 @@
 import {
     createUlasan,
+    editUlasan,
     getAllUlasan,
     likeUlasan,
     bookmarkUlasan,
@@ -20,6 +21,13 @@ router.post(
     requireAuth,
     upload.array("files"),
     createUlasan
+);
+
+router.patch(
+    "/editUlasan",
+    requireAuth,
+    upload.array("files"),
+    editUlasan
 );
 
 router.post(
