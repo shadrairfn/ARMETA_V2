@@ -50,11 +50,11 @@ const askChatbot = async (req, res) => {
     VALUES (${userId}, ${question}, ${answer})
   `);
 
-  res.json({
+  return res.status(200).json({
     success: true,
-    answer,
-    sources: similar.rows
-  });
+    data: answer,
+    message: "Success ask chatbot"
+  })
 };
 
 const getChatHistory = async (req, res) => {
@@ -66,9 +66,9 @@ const getChatHistory = async (req, res) => {
     ORDER BY created_at DESC
   `);
 
-  res.json({
+  return res.json({
     success: true,
-    history: rows.rows
+    data: rows.rows
   });
 };
 

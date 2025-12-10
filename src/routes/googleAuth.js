@@ -67,7 +67,7 @@ router.get(
       console.log("📌 UPDATED USER:", updated);
 
       const callbackUrl =
-        `http://172.24.128.1:3001/auth/callback` +
+        `http://localhost:3001/auth/callback` +
         `?accessToken=${encodeURIComponent(accessToken)}` +
         `&refreshToken=${encodeURIComponent(refreshToken)}`;
 

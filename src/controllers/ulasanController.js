@@ -1,6 +1,11 @@
 import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
-import { reviews, users, likeReviews, bookmarkReviews } from "../db/schema/schema.js";
+import {
+  reviews,
+  users,
+  likeReviews,
+  bookmarkReviews,
+} from "../db/schema/schema.js";
 import { eq, sql, and } from "drizzle-orm";
 
 import {
@@ -8,10 +13,7 @@ import {
   generateRefreshToken,
 } from "../service/tokenService.js";
 
-import {
-  successResponse,
-  createdResponse,
-} from "../utils/responseHandler.js";
+import { successResponse, createdResponse } from "../utils/responseHandler.js";
 
 import {
   AppError,
@@ -29,12 +31,20 @@ import { generateEmbedding } from "../service/vectorizationService.js";
 const createUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
 
-  let { idMatkul, idDosen, idReply, idForum, judulUlasan, textUlasan } = req.body;
+  let { idMatkul, idDosen, idReply, idForum, judulUlasan, textUlasan } =
+    req.body;
 
-  if ((!idMatkul || !idDosen || !idForum) && idReply &&!textUlasan && !judulUlasan) {
-    throw new BadRequestError("id_matkul atau id_dosen, dan textUlasan wajib diisi");
+  if (
+    (!idMatkul || !idDosen || !idForum) &&
+    idReply &&
+    !textUlasan &&
+    !judulUlasan
+  ) {
+    throw new BadRequestError(
+      "id_matkul atau id_dosen, dan textUlasan wajib diisi"
+    );
   }
-  
+
   const fileUploaded = req.files || [];
   const fileLocalLinks = [];
   for (const file of fileUploaded) {
@@ -44,22 +54,25 @@ const createUlasan = asyncHandler(async (req, res) => {
 
   console.log("🔄 Generating embedding for ulasan text...");
   const embeddingVector = await generateEmbedding(textUlasan);
-  
-  console.log("✅ Embedding generated successfully, dimension:", embeddingVector.length);
 
-  const vectorString = `[${embeddingVector.join(',')}]`;
+  console.log(
+    "✅ Embedding generated successfully, dimension:",
+    embeddingVector.length
+  );
+
+  const vectorString = `[${embeddingVector.join(",")}]`;
   console.log(`VECTORIZE DATA TYPE: ${typeof vectorString}`);
   console.log(`VECTORIZE DATA: ${vectorString}`);
-  
+
   const filesJson = JSON.stringify(fileLocalLinks);
 
-  if (idMatkul == '') {
+  if (idMatkul == "") {
     idMatkul = null;
   }
-  if (idDosen == '') {
+  if (idDosen == "") {
     idDosen = null;
   }
-  if (idReply == '') {
+  if (idReply == "") {
     idReply = null;
   }
 
@@ -72,9 +85,9 @@ const createUlasan = asyncHandler(async (req, res) => {
     textUlasan: textUlasan.substring(0, 50),
     judulUlasan: judulUlasan.substring(0, 50),
     files: fileLocalLinks.length,
-    vectorLength: vectorString.length
+    vectorLength: vectorString.length,
   });
-  
+
   const result = await db.execute(
     sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, id_forum, title, body, files, vectorize)
         VALUES (${userId}, ${idMatkul}, ${idDosen}, ${idReply}, ${idForum}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
@@ -83,8 +96,10 @@ const createUlasan = asyncHandler(async (req, res) => {
 
   const newUlasan = result.rows[0];
 
-  return createdResponse(res, "Ulasan berhasil dibuat", {
-    ulasan: newUlasan,
+  return res.status(200).json({
+    data: newUlasan,
+    status: true,
+    message: "Success get all ulasan",
   });
 });
 
@@ -94,14 +109,9 @@ const editUlasan = asyncHandler(async (req, res) => {
   let { id_review, title, body } = req.body;
 
   const [oldReview] = await db
-  .select()
-  .from(reviews)
-  .where(
-    and(
-      eq(reviews.id_user, userId),
-      eq(reviews.id_review, id_review)
-    )
-  );
+    .select()
+    .from(reviews)
+    .where(and(eq(reviews.id_user, userId), eq(reviews.id_review, id_review)));
 
   if (id_review != oldReview.id_review) {
     throw new BadRequestError("id_review tidak sama");
@@ -134,17 +144,20 @@ const editUlasan = asyncHandler(async (req, res) => {
   console.log("VECTORIZE DATA TYPE ONE:", typeof vectorString);
 
   if (body) {
-      console.log("🔄 Generating embedding for ulasan text...");
-      const embeddingVector = await generateEmbedding(body);
+    console.log("🔄 Generating embedding for ulasan text...");
+    const embeddingVector = await generateEmbedding(body);
 
-      if (!Array.isArray(embeddingVector)) {
-          throw new Error("generateEmbedding did not return an array.");
-      }
+    if (!Array.isArray(embeddingVector)) {
+      throw new Error("generateEmbedding did not return an array.");
+    }
 
-      console.log("✅ Embedding generated successfully, dimension:", embeddingVector.length);
-      
-      vectorString = embeddingVector
-      console.log("VECTORIZE DATA TYPE TWO:", typeof vectorString);
+    console.log(
+      "✅ Embedding generated successfully, dimension:",
+      embeddingVector.length
+    );
+
+    vectorString = embeddingVector;
+    console.log("VECTORIZE DATA TYPE TWO:", typeof vectorString);
   }
   if (!title || title === "") {
     title = oldReview.title;
@@ -167,7 +180,6 @@ const editUlasan = asyncHandler(async (req, res) => {
 
   console.log("UPDATE DATA TYPE:", typeof updateData.vectorize);
   console.log("UPDATE DATA:", updateData);
-  
 
   const [updatedUlasan] = await db
     .update(reviews)
@@ -176,19 +188,19 @@ const editUlasan = asyncHandler(async (req, res) => {
     .returning();
 
   return res.status(200).json({
-    data : updatedUlasan,
-    status : true,
-    message : "Success update ulasan"
+    data: updatedUlasan,
+    status: true,
+    message: "Success update ulasan",
   });
 });
 
 const getAllUlasan = asyncHandler(async (req, res) => {
   const dataUlasan = await db.select().from(reviews);
   return res.status(200).json({
-        data : dataUlasan,
-        status : true,
-        message : "Success get all ulasan"
-    });
+    data: dataUlasan,
+    status: true,
+    message: "Success get all ulasan",
+  });
 });
 
 const likeUlasan = asyncHandler(async (req, res) => {
@@ -215,11 +227,11 @@ const likeUlasan = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({
-    data : result.rows[0],
-    status : true,
-    message : "Success like ulasan"
-  })
-})
+    data: result.rows[0],
+    status: true,
+    message: "Success like ulasan",
+  });
+});
 
 const bookmarkUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
@@ -245,11 +257,11 @@ const bookmarkUlasan = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({
-    data : result.rows[0],
-    status : true,
-    message : "Success repost ulasan"
-  })
-})
+    data: result.rows[0],
+    status: true,
+    message: "Success repost ulasan",
+  });
+});
 
 const unLikeUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
@@ -275,11 +287,11 @@ const unLikeUlasan = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({
-    data : result.rows[0],
-    status : true,
-    message : "Success unlike ulasan"
-  })
-})
+    data: result.rows[0],
+    status: true,
+    message: "Success unlike ulasan",
+  });
+});
 
 const unBookmarkUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
@@ -305,11 +317,11 @@ const unBookmarkUlasan = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({
-    data : result.rows[0],
-    status : true,
-    message : "Success unlike ulasan"
-  })
-})
+    data: result.rows[0],
+    status: true,
+    message: "Success unlike ulasan",
+  });
+});
 
 const getLikeUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
@@ -321,12 +333,12 @@ const getLikeUlasan = asyncHandler(async (req, res) => {
       WHERE l.id_user = ${userId}
     `
   );
-  
+
   return res.status(200).json({
-    data : existingLike.rows,
-    status : true,
-    message : "Success get all ulasan"
-  })
+    data: existingLike.rows,
+    status: true,
+    message: "Success get all ulasan",
+  });
 });
 
 const getBookmarkUlasan = asyncHandler(async (req, res) => {
@@ -339,13 +351,13 @@ const getBookmarkUlasan = asyncHandler(async (req, res) => {
       WHERE l.id_user = ${userId}
     `
   );
-  
+
   return res.status(200).json({
-    data : existingBookmark.rows,
-    status : true,
-    message : "Success get all ulasan"
-  })
-})
+    data: existingBookmark.rows,
+    status: true,
+    message: "Success get all ulasan",
+  });
+});
 
 /**
  * Search similar ulasan using vector similarity
@@ -389,14 +401,15 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
   });
 });
 
-export { 
-  createUlasan, 
+export {
+  createUlasan,
   editUlasan,
-  getAllUlasan, 
-  likeUlasan, 
-  bookmarkUlasan, 
-  unLikeUlasan, 
+  getAllUlasan,
+  likeUlasan,
+  bookmarkUlasan,
+  unLikeUlasan,
   unBookmarkUlasan,
   getBookmarkUlasan,
-  getLikeUlasan, 
-  searchSimilarUlasan };
+  getLikeUlasan,
+  searchSimilarUlasan,
+};

@@ -37,7 +37,10 @@ const logout = asyncHandler(async (req, res, next) => {
     .set({ refreshToken: null })
     .where(eq(users.id_user, userId));
 
-  return successResponse(res, 200, "Logout berhasilll");
+  return res.status(200).json({
+    status: true,
+    message: "Logout berhasil",
+  });
 });
 
 
@@ -71,9 +74,11 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
     name: user.name,
   });
 
-  return successResponse(res, 200, "Access token berhasil diperbarui", {
+  return res.status(200).json({
+    status: true,
+    message: "Access token berhasil diperbarui",
     accessToken: newAccessToken,
-  });
+  })
 });
 
 
@@ -96,9 +101,11 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
 
   const { password: _, refresh_token: __, ...userWithoutSensitiveData } = user;
 
-  return successResponse(res, 200, "User profile berhasil diambil", {
-    user: userWithoutSensitiveData,
-  });
+  return res.status(200).json({
+    data: userWithoutSensitiveData,
+    status: true,
+    message: "Success get current user",
+  })
 });
 
 
@@ -143,8 +150,10 @@ const updateProfile = asyncHandler(async (req, res) => {
     .where(eq(users.id_user, userId))
     .returning();
 
-  return successResponse(res, 200, "Profile berhasil diupdate", {
-    user: updatedUser,
+  return res.status(200).json({
+    data: updatedUser,
+    status: true,
+    message: "Success update profile",
   });
 });
 
