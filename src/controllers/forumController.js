@@ -136,6 +136,11 @@ const getAllForum = asyncHandler(async (req, res) => {
 
 const getForumById = asyncHandler(async (req, res) => {
   const { id_forum } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+  
   const forum = await db
     .select({
       id_forum: reviewsForum.id_forum,

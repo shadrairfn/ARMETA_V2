@@ -243,6 +243,11 @@ const getAllUlasan = asyncHandler(async (req, res) => {
 
 const getUlasanById = asyncHandler(async (req, res) => {
   const { id_review } = req.body;
+
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
+  }
+
   const ulasan = await db
     .select({
       id_review: reviews.id_review,
@@ -503,6 +508,11 @@ const searchUlasan = asyncHandler(async (req, res) => {
 
 const filterUlasan = asyncHandler(async (req, res) => {
   const { from, to } = req.body;
+
+  if (!from || !to) {
+    throw new BadRequestError("from dan to wajib diisi");
+  }
+
   const ulasan = await db
     .select({
       id_review: reviews.id_review,
