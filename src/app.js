@@ -18,6 +18,7 @@ import ulasanRoutes from "./routes/ulasanRoutes.js";
 import chatbotRoutes from "./routes/chatbotRoutes.js";
 import forumRoutes from "./routes/forumRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
+import lecturerSubjectRoutes from "./routes/lecturerSubjectRoutes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,6 +60,7 @@ app.use("/api/ulasan", ulasanRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/forum", forumRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/lecturer-subjects", lecturerSubjectRoutes);
 
 app.get("/", (req, res) => {
   res.json({

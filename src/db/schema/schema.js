@@ -141,6 +141,7 @@ export const reviewsForum = pgTable("reviews_forum", {
   id_subject: uuid("id_subject").references(() => subjects.id_subject, { onDelete: "cascade" }).notNull(),
   title: text("title").notNull(),
   description: text("description"),
+  files: jsonb("files").$type/** @type {string[]} */(),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 })

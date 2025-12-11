@@ -8,7 +8,10 @@ import {
     unBookmarkUlasan,
     getBookmarkUlasan,
     getLikeUlasan,
-    searchSimilarUlasan
+    searchSimilarUlasan,
+    searchUlasan,
+    filterUlasan,
+    sortUlasan
 } from "../controllers/ulasanController.js";
 import express from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -77,5 +80,22 @@ router.get(
     requireAuth,
     getBookmarkUlasan
 );
+
+router.get(
+    "/searchUlasan",
+    requireAuth,
+    searchUlasan)
+
+router.get(
+    "/filterUlasan",
+    requireAuth,
+    filterUlasan
+)
+
+router.get(
+    "/sortUlasan",
+    requireAuth,
+    sortUlasan
+)
 
 export default router;
