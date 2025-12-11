@@ -53,25 +53,6 @@ const createForum = asyncHandler(async (req, res) => {
   });
 });
 
-const getForums = asyncHandler(async (req, res) => {
-  const { id_subject } = req.body;
-
-  if (!id_subject) {
-    throw new BadRequestError("id_subject wajib diisi");
-  }
-
-  const forums = await db
-    .select()
-    .from(reviewsForum)
-    .where(eq(reviewsForum.id_subject, id_subject));
-
-  return res.status(200).json({
-    success: true,
-    data: forums,
-    message: "Success get all forums",
-  });
-});
-
 const searchForum = asyncHandler(async (req, res) => {
   const { q } = req.body;
 
@@ -101,7 +82,6 @@ const searchForum = asyncHandler(async (req, res) => {
     });
   }
 
-  // 3. Response
   res.status(200).json({
     status: "success",
     data: results,
@@ -134,4 +114,73 @@ const filterForum = asyncHandler(async (req, res) => {
   });
 });
 
-export { createForum, getForums, searchForum, filterForum };
+const getAllForum = asyncHandler(async (req, res) => {
+  const forum = await db
+  .select({
+    id_forum: reviewsForum.id_forum,
+    id_user: reviewsForum.id_user,
+    id_subject: reviewsForum.id_subject,
+    title: reviewsForum.title,
+    files: reviewsForum.files,
+    description: reviewsForum.description,
+    created_at: reviewsForum.created_at,
+  })
+  .from(reviewsForum);
+
+  return res.status(200).json({
+    success: true,
+    data: forum,
+    message: "Success get all forum",
+  });
+});
+
+const getForumById = asyncHandler(async (req, res) => {
+  const { id_forum } = req.body;
+  const forum = await db
+    .select({
+      id_forum: reviewsForum.id_forum,
+      id_user: reviewsForum.id_user,
+      id_subject: reviewsForum.id_subject,
+      title: reviewsForum.title,
+      files: reviewsForum.files,
+      description: reviewsForum.description,
+      created_at: reviewsForum.created_at,
+    })
+    .from(reviewsForum)
+    .where(eq(reviewsForum.id_forum, id_forum));
+
+  return res.status(200).json({
+    success: true,
+    data: forum,
+    message: "Success get forum by id",
+  });
+})
+
+const getForumBySubject = asyncHandler(async (req, res) => {
+  const { id_subject } = req.body;
+
+  if (!id_subject) {
+    throw new BadRequestError("id_subject wajib diisi");
+  }
+
+  const forums = await db
+    .select({
+      id_forum: reviewsForum.id_forum,
+      id_user: reviewsForum.id_user,
+      id_subject: reviewsForum.id_subject,
+      title: reviewsForum.title,
+      files: reviewsForum.files,
+      description: reviewsForum.description,
+      created_at: reviewsForum.created_at,
+    })
+    .from(reviewsForum)
+    .where(eq(reviewsForum.id_subject, id_subject));
+
+  return res.status(200).json({
+    success: true,
+    data: forums,
+    message: "Success get all forums",
+  });
+});
+
+export { createForum, getForumBySubject, searchForum, filterForum, getAllForum, getForumById };

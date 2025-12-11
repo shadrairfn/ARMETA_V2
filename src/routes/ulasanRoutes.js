@@ -11,7 +11,8 @@ import {
     searchSimilarUlasan,
     searchUlasan,
     filterUlasan,
-    sortUlasan
+    sortUlasan,
+    getUlasanById
 } from "../controllers/ulasanController.js";
 import express from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -44,6 +45,12 @@ router.get(
     requireAuth,
     getAllUlasan
 );
+
+router.get(
+    "/getUlasanById",
+    requireAuth,
+    getUlasanById
+)
 
 router.post(
     "/likeUlasan",

@@ -198,17 +198,11 @@ const editUlasan = asyncHandler(async (req, res) => {
 });
 
 const getAllUlasan = asyncHandler(async (req, res) => {
-  // 1. Ambil parameter page & limit (Default: page 1, 10 data per load)
   const page = parseInt(req.body.page) || 1;
   const limit = parseInt(req.body.limit) || 10;
 
-  // 2. Hitung Offset (Berapa data yang harus dilewati)
-  // Rumus: (Halaman saat ini - 1) * Jumlah per halaman
-  // Contoh: Halaman 2, limit 10. Offset = (2-1)*10 = 10. (Lewati 10 data awal)
   const offset = (page - 1) * limit;
 
-  // 3. Query Data dengan Pagination
-  // Penting: Selalu gunakan .orderBy() agar urutan data konsisten saat di-scroll
   const dataUlasan = await db
     .select({
       id_review: reviews.id_review,
@@ -216,19 +210,23 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       title: reviews.title,
       body: reviews.body,
       files: reviews.files,
+      total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
+      total_bookmarks:
+        sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
     })
     .from(reviews)
-    .limit(limit) // Ambil hanya 10
-    .offset(offset) // Loncat sekian data
-    .orderBy(desc(reviews.created_at)); // Urutkan dari yang terbaru
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .groupBy(reviews.id_review)
 
-  // (Opsional) 4. Hitung Total Data (Untuk tahu kapan harus stop scroll)
-  // Ini query tambahan untuk menghitung total baris di tabel
+    .limit(limit)
+    .offset(offset)
+    .orderBy(desc(reviews.created_at));
+
   const totalResult = await db.select({ value: count() }).from(reviews);
   const totalData = totalResult[0].value;
   const totalPage = Math.ceil(totalData / limit);
 
-  // 5. Response
   return res.status(200).json({
     status: true,
     message: "Success get ulasan",
@@ -237,9 +235,35 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       limit: limit,
       totalData: totalData,
       totalPage: totalPage,
-      hasNextPage: page < totalPage, // Memberitahu frontend apakah masih ada data lagi
+      hasNextPage: page < totalPage, 
     },
     data: dataUlasan,
+  });
+});
+
+const getUlasanById = asyncHandler(async (req, res) => {
+  const { id_review } = req.body;
+  const ulasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
+      total_bookmarks:
+        sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+    })
+    .from(reviews)
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .groupBy(reviews.id_review)
+    .where(eq(reviews.id_review, id_review));
+
+  return res.status(200).json({
+    data: ulasan,
+    status: true,
+    message: "Success get ulasan by id",
   });
 });
 
@@ -526,7 +550,9 @@ const sortUlasan = asyncHandler(async (req, res) => {
       break;
     case "date":
     default:
-      orderByClause = isAsc ? asc(reviews.created_at) : desc(reviews.created_at);
+      orderByClause = isAsc
+        ? asc(reviews.created_at)
+        : desc(reviews.created_at);
       break;
   }
 
@@ -560,6 +586,7 @@ export {
   createUlasan,
   editUlasan,
   getAllUlasan,
+  getUlasanById,
   likeUlasan,
   bookmarkUlasan,
   unLikeUlasan,
