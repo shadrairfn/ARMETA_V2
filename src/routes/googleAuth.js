@@ -32,7 +32,10 @@ router.get(
     console.log("\n🔥 CALLBACK HIT:", req.query);
     next();
   },
-  passport.authenticate("google", { failureRedirect: "/login.html", session: true }),
+  passport.authenticate("google", {
+    failureRedirect: "/login.html",
+    session: true,
+  }),
 
   async (req, res) => {
     console.log("\n🎯 AFTER PASSPORT AUTH:", req.user);
@@ -67,18 +70,17 @@ router.get(
       console.log("📌 UPDATED USER:", updated);
 
       const callbackUrl =
-        `http://localhost:3001/auth/callback` +
-        `?accessToken=${encodeURIComponent(accessToken)}` +
-        `&refreshToken=${encodeURIComponent(refreshToken)}`;
+        `?accessToken=${encodeURIComponent(accessToken)}`
 
       console.log("\n🔁 REDIRECTING TO:", callbackUrl);
-      return res.redirect(callbackUrl);
+      return res.status(200).json({
+        data: callbackUrl,
+      });
     } catch (err) {
       console.log("\n❌ CALLBACK ERROR:", err);
       return res.redirect("/login.html");
     }
   }
 );
-
 
 export default router;

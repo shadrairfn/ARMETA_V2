@@ -8,7 +8,11 @@ import {
     unBookmarkUlasan,
     getBookmarkUlasan,
     getLikeUlasan,
-    searchSimilarUlasan
+    searchSimilarUlasan,
+    searchUlasan,
+    filterUlasan,
+    sortUlasan,
+    getUlasanById
 } from "../controllers/ulasanController.js";
 import express from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -41,6 +45,12 @@ router.get(
     requireAuth,
     getAllUlasan
 );
+
+router.get(
+    "/getUlasanById",
+    requireAuth,
+    getUlasanById
+)
 
 router.post(
     "/likeUlasan",
@@ -77,5 +87,22 @@ router.get(
     requireAuth,
     getBookmarkUlasan
 );
+
+router.get(
+    "/searchUlasan",
+    requireAuth,
+    searchUlasan)
+
+router.get(
+    "/filterUlasan",
+    requireAuth,
+    filterUlasan
+)
+
+router.get(
+    "/sortUlasan",
+    requireAuth,
+    sortUlasan
+)
 
 export default router;

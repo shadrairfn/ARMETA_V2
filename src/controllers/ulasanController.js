@@ -6,7 +6,7 @@ import {
   likeReviews,
   bookmarkReviews,
 } from "../db/schema/schema.js";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, count, desc, gte, lte, asc } from "drizzle-orm";
 
 import {
   generateAccessToken,
@@ -74,6 +74,9 @@ const createUlasan = asyncHandler(async (req, res) => {
   }
   if (idReply == "") {
     idReply = null;
+  }
+  if (idForum == "") {
+    idForum = null;
   }
 
   console.log("Debug insert values:", {
@@ -195,11 +198,77 @@ const editUlasan = asyncHandler(async (req, res) => {
 });
 
 const getAllUlasan = asyncHandler(async (req, res) => {
-  const dataUlasan = await db.select().from(reviews);
+  const page = parseInt(req.body.page) || 1;
+  const limit = parseInt(req.body.limit) || 10;
+
+  const offset = (page - 1) * limit;
+
+  const dataUlasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
+      total_bookmarks:
+        sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+    })
+    .from(reviews)
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .groupBy(reviews.id_review)
+
+    .limit(limit)
+    .offset(offset)
+    .orderBy(desc(reviews.created_at));
+
+  const totalResult = await db.select({ value: count() }).from(reviews);
+  const totalData = totalResult[0].value;
+  const totalPage = Math.ceil(totalData / limit);
+
   return res.status(200).json({
-    data: dataUlasan,
     status: true,
-    message: "Success get all ulasan",
+    message: "Success get ulasan",
+    pagination: {
+      currentPage: page,
+      limit: limit,
+      totalData: totalData,
+      totalPage: totalPage,
+      hasNextPage: page < totalPage, 
+    },
+    data: dataUlasan,
+  });
+});
+
+const getUlasanById = asyncHandler(async (req, res) => {
+  const { id_review } = req.body;
+
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
+  }
+
+  const ulasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
+      total_bookmarks:
+        sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+    })
+    .from(reviews)
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .groupBy(reviews.id_review)
+    .where(eq(reviews.id_review, id_review));
+
+  return res.status(200).json({
+    data: ulasan,
+    status: true,
+    message: "Success get ulasan by id",
   });
 });
 
@@ -401,10 +470,133 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
   });
 });
 
+const searchUlasan = asyncHandler(async (req, res) => {
+  const { q } = req.body;
+  if (!q) {
+    return res.status(400).json({
+      message: "Silakan masukkan kata kunci pencarian.",
+    });
+  }
+
+  const searchPattern = `%${q}%`;
+
+  const searchResults = await db.execute(
+    sql`
+      SELECT *
+      FROM reviews
+      WHERE title ILIKE ${searchPattern}
+      LIMIT 20
+    `
+  );
+
+  const results = [];
+  for (const row of searchResults.rows) {
+    results.push({
+      id_review: row.id_review,
+      title: row.title,
+      files: row.files,
+      created_at: row.created_at,
+    });
+  }
+
+  res.status(200).json({
+    status: "success",
+    data: results,
+    message: "Pencarian berhasil",
+  });
+});
+
+const filterUlasan = asyncHandler(async (req, res) => {
+  const { from, to } = req.body;
+
+  if (!from || !to) {
+    throw new BadRequestError("from dan to wajib diisi");
+  }
+
+  const ulasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      id_subject: reviews.id_subject,
+      id_lecturer: reviews.id_lecturer,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      created_at: reviews.created_at,
+    })
+    .from(reviews)
+    .where(
+      and(
+        gte(reviews.created_at, new Date(from)),
+        lte(reviews.created_at, new Date(to))
+      )
+    );
+  return res.status(200).json({
+    success: true,
+    data: ulasan,
+    message: "Success get all ulasan",
+  });
+});
+
+const sortUlasan = asyncHandler(async (req, res) => {
+  const { sortBy = "date", order = "desc" } = req.query;
+
+  const countLikes = sql`count(distinct ${likeReviews.id_like})`;
+  const countBookmarks = sql`count(distinct ${bookmarkReviews.id_bookmark})`;
+  const countPopularity = sql`(${countLikes} + ${countBookmarks})`;
+
+  let orderByClause;
+  const isAsc = order === "asc";
+
+  switch (sortBy) {
+    case "most_like":
+      orderByClause = isAsc ? asc(countLikes) : desc(countLikes);
+      break;
+    case "most_bookmark":
+      orderByClause = isAsc ? asc(countBookmarks) : desc(countBookmarks);
+      break;
+    case "most_popular":
+      orderByClause = isAsc ? asc(countPopularity) : desc(countPopularity);
+      break;
+    case "date":
+    default:
+      orderByClause = isAsc
+        ? asc(reviews.created_at)
+        : desc(reviews.created_at);
+      break;
+  }
+
+  const ulasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      created_at: reviews.created_at,
+      total_likes: sql`${countLikes}`.mapWith(Number),
+      total_bookmarks: sql`${countBookmarks}`.mapWith(Number),
+      popularity_score: sql`${countPopularity}`.mapWith(Number),
+    })
+    .from(reviews)
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .groupBy(reviews.id_review)
+    .orderBy(orderByClause);
+
+  return res.status(200).json({
+    success: true,
+    count: ulasan.length,
+    data: ulasan,
+    message: `Success get ulasan sorted by ${sortBy}`,
+  });
+});
+
 export {
   createUlasan,
   editUlasan,
   getAllUlasan,
+  getUlasanById,
   likeUlasan,
   bookmarkUlasan,
   unLikeUlasan,
@@ -412,4 +604,7 @@ export {
   getBookmarkUlasan,
   getLikeUlasan,
   searchSimilarUlasan,
+  searchUlasan,
+  filterUlasan,
+  sortUlasan,
 };
