@@ -5,6 +5,8 @@ import {
   users,
   likeReviews,
   bookmarkReviews,
+  subjects,
+  lecturers,
 } from "../db/schema/schema.js";
 import { eq, sql, and, count, desc, gte, lte, asc } from "drizzle-orm";
 
@@ -198,30 +200,46 @@ const editUlasan = asyncHandler(async (req, res) => {
 });
 
 const getAllUlasan = asyncHandler(async (req, res) => {
-  const page = parseInt(req.body.page) || 1;
+  const page = parseInt(req.body.page) || 1; // Saran: Gunakan req.query untuk GET
   const limit = parseInt(req.body.limit) || 10;
-
   const offset = (page - 1) * limit;
 
-  const dataUlasan = await db
-    .select({
-      id_review: reviews.id_review,
-      id_user: reviews.id_user,
-      title: reviews.title,
-      body: reviews.body,
-      files: reviews.files,
-      total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
-      total_bookmarks:
-        sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
-    })
-    .from(reviews)
-    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
-    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
-    .groupBy(reviews.id_review)
+  const dataUlasan = await db.execute(
+    sql`
+      SELECT 
+    r.id_review, 
+    r.id_user, 
+    r.title, 
+    r.body, 
+    r.files, 
+    r.created_at,
+    
+    COALESCE(d.name, '') AS lecturer_name, 
+    COALESCE(s.name, '') AS subject_name,
+    s.semester,
+    
+    COUNT(DISTINCT l.id_like) AS total_likes,
+    COUNT(DISTINCT b.id_bookmark) AS total_bookmarks
 
-    .limit(limit)
-    .offset(offset)
-    .orderBy(desc(reviews.created_at));
+    FROM reviews r
+
+    LEFT JOIN lecturers d ON r.id_lecturer = d.id_lecturer
+    LEFT JOIN subjects s ON r.id_subject = s.id_subject
+    LEFT JOIN like_reviews l ON r.id_review = l.id_review
+    LEFT JOIN bookmark_reviews b ON r.id_review = b.id_review
+
+    GROUP BY 
+        r.id_review, 
+        d.name, 
+        s.name, 
+        s.semester
+
+    ORDER BY r.created_at DESC
+
+    LIMIT ${limit}
+    OFFSET ${offset};
+    `
+  );
 
   const totalResult = await db.select({ value: count() }).from(reviews);
   const totalData = totalResult[0].value;
@@ -235,7 +253,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       limit: limit,
       totalData: totalData,
       totalPage: totalPage,
-      hasNextPage: page < totalPage, 
+      hasNextPage: page < totalPage,
     },
     data: dataUlasan,
   });
@@ -428,10 +446,6 @@ const getBookmarkUlasan = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Search similar ulasan using vector similarity
- * Uses cosine similarity via pgvector extension
- */
 const searchSimilarUlasan = asyncHandler(async (req, res) => {
   const { query, limit = 5 } = req.body;
 
