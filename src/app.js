@@ -70,8 +70,8 @@ app.get("/", (req, res) => {
   });
 });
 
-// // 404 & Error handler
-// app.use(notFoundHandler);
-// app.use(errorHandler);
+// 404 & Error handler
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;

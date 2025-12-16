@@ -23,8 +23,6 @@ import {
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadToFirebase } from "../service/uploadService.js";
-import { generateEmbedding } from "../service/vectorizationService.js";
 
 const createReport = asyncHandler(async (req, res) => {
     const userId = req.user.id_user;
@@ -36,7 +34,7 @@ const createReport = asyncHandler(async (req, res) => {
     if (!type) {
         throw new BadRequestError("Type laporan wajib diisi.");
     }
-    
+     
     if (!id_review && !id_lecturer) {
         throw new BadRequestError("Laporan harus merujuk ke Review atau Dosen (id_review atau id_lecturer wajib diisi salah satunya).");
     }
@@ -57,6 +55,10 @@ const createReport = asyncHandler(async (req, res) => {
 
 const getReports = asyncHandler(async (req, res) => {
     const userId = req.user.id_user;
+
+    if (!userId) {
+        throw new BadRequestError("User id wajib diisi.");
+    }
 
     const reportsList = await db.execute(
         sql`SELECT * FROM reports WHERE id_user = ${userId} ORDER BY created_at DESC`

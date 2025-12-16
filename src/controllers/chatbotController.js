@@ -2,16 +2,21 @@ import { db } from "../db/db.js";
 import { sql } from "drizzle-orm";
 import { generateEmbedding } from "../service/vectorizationService.js";
 import { aiClient } from "../service/llmService.js";
+import {
+  AppError,
+  BadRequestError,
+  UnauthorizedError,
+  ConflictError,
+  NotFoundError,
+  TokenError,
+} from "../utils/customError.js";
 
 const askChatbot = async (req, res) => {
   const { question, id_subject } = req.body;
   const userId = req.user.id_user;
 
   if (!question || !id_subject) {
-    return res.status(400).json({
-      success: false,
-      message: "question dan id_subject wajib diisi"
-    });
+    throw new BadRequestError("question dan id_subject wajib diisi");
   }
 
   const queryEmbedding = await generateEmbedding(question);
@@ -60,12 +65,16 @@ const askChatbot = async (req, res) => {
 const getChatHistory = async (req, res) => {
   const userId = req.user.id_user;
 
+  if (!userId) {
+    throw new BadRequestError("id_user wajib diisi");
+  }
+
   const rows = await db.execute(sql`
     SELECT * FROM chatbot_history 
     WHERE id_user = ${userId}
     ORDER BY created_at DESC
   `);
-
+ 
   return res.json({
     success: true,
     data: rows.rows

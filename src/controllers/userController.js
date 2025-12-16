@@ -13,7 +13,7 @@ import {
   createdResponse,
 } from "../utils/responseHandler.js";
 
-import {
+import { 
   AppError,
   BadRequestError,
   UnauthorizedError,
@@ -23,7 +23,15 @@ import {
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadToFirebase } from "../service/uploadService.js";
+import { createClient } from '@supabase/supabase-js';
+
+import dotenv from 'dotenv';
+import { point } from "drizzle-orm/pg-core";
+dotenv.config();
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const logout = asyncHandler(async (req, res, next) => {
   const userId = req.user?.id_user;
@@ -64,7 +72,14 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
     .where(eq(users.id_user, decoded.id_user))
     .limit(1);
 
-  if (!user || user.refresh_token !== refreshToken) {
+  console.log(user.refreshToken);
+  
+  
+  if (!user) {
+    throw new TokenError("user tidak valid");
+  }
+
+  if (!user || user.refreshToken !== refreshToken) {
     throw new TokenError("Refresh token tidak valid");
   }
 
@@ -89,8 +104,16 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
     throw new UnauthorizedError();
   }
 
-  const [user] = await db
-    .select()
+  const user = await db
+    .select({
+      id_user: users.id_user,
+      email: users.email,
+      name: users.name,
+      image: users.image,
+      poin: users.poin,
+      created_at: users.created_at,
+      updated_at: users.updated_at
+    })
     .from(users)
     .where(eq(users.id_user, userId))
     .limit(1);
@@ -99,10 +122,42 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
     throw new NotFoundError("User tidak ditemukan");
   }
 
-  const { password: _, refresh_token: __, ...userWithoutSensitiveData } = user;
+  return res.status(200).json({
+    data: user,
+    status: true,
+    message: "Success get current user",
+  })
+});
+
+const getUserById = asyncHandler(async (req, res, next) => {
+  const { id_user } = req.params;
+  
+    if (!id_user) {
+    throw new UnauthorizedError();
+  }
+
+  const result = await db
+    .select({
+      id_user: users.id_user,
+      email: users.email,
+      name: users.name,
+      image: users.image,
+      poin: users.poin,
+      created_at: users.created_at,
+      updated_at: users.updated_at
+    })
+    .from(users)
+    .where(eq(users.id_user, id_user))
+    .limit(1);
+
+  if (!result) {
+    throw new NotFoundError("User tidak ditemukan");
+  }
+
+  const user = result[0];
 
   return res.status(200).json({
-    data: userWithoutSensitiveData,
+    data: user,
     status: true,
     message: "Success get current user",
   })
@@ -111,16 +166,17 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
 
 const updateProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
+  const { name } = req.body;
 
-  let name = req.body?.name ?? null;
+  // 1. Cek apakah ada data yang dikirim (Text atau File)
+  // Perbaikan: Cek req.file (single) dan req.files (array) untuk jaga-jaga
+  const hasFile = req.file || (req.files && req.files.length > 0);
 
-  if (!name && !req.file) {
-    throw new BadRequestError("Tidak ada data yang diupdate");
+  if (!name && !hasFile) {
+    throw new BadRequestError("Tidak ada data yang diupdate (nama atau gambar kosong)");
   }
 
-  console.log("REQ BODY BEFORE:", req.body);
-  console.log("REQ FILE BEFORE:", req.file);
-
+  // Cek user lama
   const [oldUser] = await db
     .select()
     .from(users)
@@ -128,22 +184,54 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   if (!oldUser) throw new NotFoundError("User tidak ditemukan");
 
-  // Upload file bila ada
-  let profileUrl = oldUser.image;
-  if (req.file) {
-    profileUrl = await uploadToFirebase(req.file, "profile_photos");
+  // 2. Upload ke Supabase (Hanya jika ada file)
+  let profileUrl = null;
+  
+  if (hasFile) {
+    // Normalisasi: Ambil file pertama saja karena ini profile picture
+    const fileToUpload = req.file || req.files[0];
+    const BUCKET_NAME = "armeta-profile";
+    
+    // Nama file unik
+    const fileName = `profiles/${userId}-${Date.now()}-${fileToUpload.originalname.replace(/\s/g,"_")}`;
+
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(fileName, fileToUpload.buffer, {
+        contentType: fileToUpload.mimetype,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error("Supabase Upload Error:", error);
+      throw new Error(`Gagal upload file: ${error.message}`);
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(fileName);
+
+    profileUrl = publicUrlData.publicUrl;
   }
 
-  // fallback name
-  if (!name || name === "") {
-    name = oldUser.name;
+  // 3. Susun Data Update Secara Dinamis
+  // Kita hanya memasukkan field ke dalam objek updateData JIKA datanya ada.
+  // Ini mencegah menimpa data lama dengan null.
+  const updateData = {
+    updated_at: new Date(), // Selalu update timestamp
+  };
+
+  if (name) {
+    updateData.name = name;
   }
 
-  console.log("REQ BODY AFTER:", req.body);
-  console.log("REQ FILE AFTER:", req.file);
+  if (profileUrl) {
+    updateData.image = profileUrl;
+  }
 
-  const updateData = { name, image: profileUrl };
+  console.log("FINAL UPDATE DATA:", updateData);
 
+  // 4. Eksekusi Update
   const [updatedUser] = await db
     .update(users)
     .set(updateData)
@@ -161,5 +249,6 @@ export {
   logout,
   refreshAccessToken,
   getCurrentUser,
+  getUserById,
   updateProfile
 };
