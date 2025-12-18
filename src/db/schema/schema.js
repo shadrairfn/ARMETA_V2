@@ -43,7 +43,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   likeReviews: many(likeReviews),
 }));
 
-export const lecturers = pgTable("dosen", {
+export const lecturers = pgTable("lecturers", {
   id_lecturer: uuid("id_lecturer").defaultRandom().primaryKey().notNull(),
   name: varchar("name", { length: 128 }).notNull(),
   npm: varchar("npm", { length: 50 }),

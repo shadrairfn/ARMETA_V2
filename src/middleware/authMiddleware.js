@@ -17,6 +17,10 @@ export const requireAuth = (req, res, next) => {
         .json({ message: "Token tidak valid atau sudah kedaluwarsa" });
     }
 
+    console.log(" ================= decoded ================");
+    console.log(decoded);
+    console.log(" ================= decoded ================");
+
     req.user = decoded; // { id_user, email, nama }
     next();
   });

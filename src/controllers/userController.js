@@ -13,7 +13,7 @@ import {
   createdResponse,
 } from "../utils/responseHandler.js";
 
-import { 
+import {
   AppError,
   BadRequestError,
   UnauthorizedError,
@@ -73,8 +73,8 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
     .limit(1);
 
   console.log(user.refreshToken);
-  
-  
+
+
   if (!user) {
     throw new TokenError("user tidak valid");
   }
@@ -98,11 +98,13 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
 
 
 const getCurrentUser = asyncHandler(async (req, res, next) => {
+
   const userId = req.user?.id_user;
 
   if (!userId) {
     throw new UnauthorizedError();
   }
+
 
   const user = await db
     .select({
@@ -123,7 +125,7 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
   }
 
   return res.status(200).json({
-    data: user,
+    data: user[0],
     status: true,
     message: "Success get current user",
   })
@@ -131,8 +133,14 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
 
 const getUserById = asyncHandler(async (req, res, next) => {
   const { id_user } = req.params;
-  
-    if (!id_user) {
+
+  console.log(" ================= id_user ================");
+  console.log(id_user);
+  console.log(req.query)
+  console.log(req.params)
+  console.log(" ================= id_user ================");
+
+  if (!id_user) {
     throw new UnauthorizedError();
   }
 
@@ -186,14 +194,14 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   // 2. Upload ke Supabase (Hanya jika ada file)
   let profileUrl = null;
-  
+
   if (hasFile) {
     // Normalisasi: Ambil file pertama saja karena ini profile picture
     const fileToUpload = req.file || req.files[0];
     const BUCKET_NAME = "armeta-profile";
-    
+
     // Nama file unik
-    const fileName = `profiles/${userId}-${Date.now()}-${fileToUpload.originalname.replace(/\s/g,"_")}`;
+    const fileName = `profiles/${userId}-${Date.now()}-${fileToUpload.originalname.replace(/\s/g, "_")}`;
 
     const { error } = await supabase.storage
       .from(BUCKET_NAME)

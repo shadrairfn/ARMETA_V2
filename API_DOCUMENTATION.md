@@ -214,6 +214,39 @@ Invalidates the user's refresh token.
 
 ---
 
+#### 5. Get User by ID
+
+Get a specific user's profile information by their ID.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/users/:id_user` |
+| **Auth Required** | No |
+
+**URL Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id_user` | uuid | User ID |
+
+**Success Response (200):**
+```json
+{
+  "status": true,
+  "message": "Success get current user",
+  "data": {
+    "id_user": "uuid",
+    "name": "string",
+    "email": "string",
+    "image": "string | null",
+    "poin": 0,
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+  }
+}
+```
+
+---
+
 ### Ulasan (Review) Routes
 
 Base path: `/api/ulasan`
@@ -568,6 +601,184 @@ Get all reviews bookmarked by the authenticated user.
 
 ---
 
+#### 11. Get Ulasan by ID
+
+Get a specific review by its ID, including replies.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/ulasan/getUlasanById` |
+| **Auth Required** | Yes |
+
+**Request Body:**
+```json
+{
+  "id_review": "uuid"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Success get ulasan by id",
+  "data": {
+    "id_review": "uuid",
+    "title": "string",
+    "body": "string",
+    "files": ["url1", "url2"],
+    "created_at": "timestamp",
+    "updated_at": "timestamp",
+    "user": {
+      "id_user": "uuid",
+      "name": "string",
+      "email": "string",
+      "image": "string | null"
+    },
+    "total_likes": 0,
+    "total_bookmarks": 0,
+    "replies": [
+      {
+        "id_review": "uuid",
+        "body": "string",
+        "files": ["url"],
+        "created_at": "timestamp",
+        "user": {
+          "id_user": "uuid",
+          "name": "string",
+          "image": "string | null"
+        },
+        "total_likes": 0,
+        "total_bookmarks": 0
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 12. Search Ulasan by Keyword
+
+Search reviews by keyword in title.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/ulasan/searchUlasan` |
+| **Auth Required** | Yes |
+
+**Request Body:**
+```json
+{
+  "q": "string"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `q` | string | Yes | Search keyword |
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Pencarian berhasil",
+  "data": [
+    {
+      "id_review": "uuid",
+      "title": "string",
+      "files": ["url1"],
+      "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+#### 13. Filter Ulasan by Date
+
+Filter reviews by date range.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/ulasan/filterUlasan` |
+| **Auth Required** | Yes |
+
+**Request Body:**
+```json
+{
+  "from": "2024-01-01",
+  "to": "2024-12-31"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `from` | string (date) | Yes | Start date (YYYY-MM-DD) |
+| `to` | string (date) | Yes | End date (YYYY-MM-DD) |
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Success get all ulasan",
+  "data": [
+    {
+      "id_review": "uuid",
+      "id_user": "uuid",
+      "id_subject": "uuid | null",
+      "id_lecturer": "uuid | null",
+      "title": "string",
+      "body": "string",
+      "files": ["url1"],
+      "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+#### 14. Sort Ulasan
+
+Sort reviews by various criteria.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/ulasan/sortUlasan` |
+| **Auth Required** | Yes |
+
+**Query Parameters:**
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `sortBy` | string | No | `date` | Sort criteria: `date`, `most_like`, `most_bookmark`, `most_popular` |
+| `order` | string | No | `desc` | Sort order: `asc` or `desc` |
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "count": 10,
+  "message": "Success get ulasan sorted by date",
+  "data": [
+    {
+      "id_review": "uuid",
+      "id_user": "uuid",
+      "title": "string",
+      "body": "string",
+      "files": ["url1"],
+      "created_at": "timestamp",
+      "total_likes": 5,
+      "total_bookmarks": 3,
+      "popularity_score": 8
+    }
+  ]
+}
+```
+
+---
+
 ### Forum Routes
 
 Base path: `/api/forum`
@@ -623,7 +834,7 @@ Get all forums for a specific subject.
 
 | Property | Value |
 |----------|-------|
-| **Endpoint** | `GET /api/forum/getForums` |
+| **Endpoint** | `GET /api/forum/getForumSubject` |
 | **Auth Required** | Yes |
 
 **Request Body:**
@@ -644,9 +855,170 @@ Get all forums for a specific subject.
       "id_user": "uuid",
       "id_subject": "uuid",
       "title": "string",
+      "files": ["url1"],
       "description": "string",
-      "created_at": "timestamp",
-      "updated_at": "timestamp"
+      "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+#### 3. Get All Forums
+
+Get all forums in the system.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/forum/getAllForum` |
+| **Auth Required** | Yes |
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Success get all forum",
+  "data": [
+    {
+      "id_forum": "uuid",
+      "id_user": "uuid",
+      "id_subject": "uuid",
+      "title": "string",
+      "files": ["url1"],
+      "description": "string",
+      "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+#### 4. Get Forum by ID
+
+Get a specific forum by its ID, including all reviews posted in that forum.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/forum/getForumId` |
+| **Auth Required** | Yes |
+
+**Request Body:**
+```json
+{
+  "id_forum": "uuid"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Success get forum by id",
+  "data": {
+    "id_forum": "uuid",
+    "title": "string",
+    "description": "string",
+    "files": ["url1"],
+    "created_at": "timestamp",
+    "creator": {
+      "id_user": "uuid",
+      "name": "string",
+      "image": "string | null"
+    },
+    "reviews": [
+      {
+        "id_review": "uuid",
+        "title": "string",
+        "body": "string",
+        "files": ["url1"],
+        "created_at": "timestamp",
+        "reviewer": {
+          "id_user": "uuid",
+          "name": "string",
+          "image": "string | null"
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 5. Search Forum
+
+Search forums by keyword in title.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/forum/searchForum` |
+| **Auth Required** | Yes |
+
+**Request Body:**
+```json
+{
+  "q": "string"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `q` | string | Yes | Search keyword |
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Pencarian berhasil",
+  "data": [
+    {
+      "id_forum": "uuid",
+      "title": "string",
+      "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+#### 6. Filter Forum by Date
+
+Filter forums by date range.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/forum/filterForum` |
+| **Auth Required** | Yes |
+
+**Request Body:**
+```json
+{
+  "from": "2024-01-01",
+  "to": "2024-12-31"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `from` | string (date) | Yes | Start date (YYYY-MM-DD) |
+| `to` | string (date) | Yes | End date (YYYY-MM-DD) |
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Success get all forum",
+  "data": [
+    {
+      "id_forum": "uuid",
+      "id_user": "uuid",
+      "id_subject": "uuid",
+      "title": "string",
+      "description": "string",
+      "created_at": "timestamp"
     }
   ]
 }
@@ -817,6 +1189,92 @@ Get the authenticated user's chatbot conversation history.
       "question": "string",
       "answer": "string",
       "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+#### 2. Get Chat History
+
+Get the authenticated user's chat history with the chatbot.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/chatbot/history` |
+| **Auth Required** | Yes |
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id_chat": "uuid",
+      "id_user": "uuid",
+      "question": "string",
+      "answer": "string",
+      "created_at": "timestamp"
+    }
+  ]
+}
+```
+
+---
+
+### Lecturer & Subject Routes
+
+Base path: `/api/lecturer-subjects`
+
+---
+
+#### 1. Get All Lecturers
+
+Get a list of all lecturers.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/lecturer-subjects/getLecturers` |
+| **Auth Required** | No |
+
+**Success Response (200):**
+```json
+{
+  "status": true,
+  "message": "Success get all lecturers",
+  "data": [
+    {
+      "id_lecturer": "uuid",
+      "name": "string",
+      "faculty": "string"
+    }
+  ]
+}
+```
+
+---
+
+#### 2. Get All Subjects
+
+Get a list of all subjects.
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `GET /api/lecturer-subjects/getSubjects` |
+| **Auth Required** | No |
+
+**Success Response (200):**
+```json
+{
+  "status": true,
+  "message": "Success get all subjects",
+  "data": [
+    {
+      "id_subject": "uuid",
+      "code": "string",
+      "name": "string",
+      "semester": "integer"
     }
   ]
 }

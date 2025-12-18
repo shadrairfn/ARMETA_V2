@@ -8,7 +8,7 @@ import {
   subjects,
   lecturers,
 } from "../db/schema/schema.js";
-import { eq, sql, and, count, desc, gte, lte, asc } from "drizzle-orm";
+import { eq, sql, and, count, desc, gte, lte, asc, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import {
@@ -47,7 +47,7 @@ const createUlasan = asyncHandler(async (req, res) => {
   // Validasi Input
   if (
     (!idMatkul || !idDosen || !idForum ||
-    idReply) &&
+      idReply) &&
     !textUlasan &&
     !judulUlasan
   ) {
@@ -109,10 +109,10 @@ const createUlasan = asyncHandler(async (req, res) => {
   const filesJson = JSON.stringify(fileLocalLinks);
 
   // Normalisasi data kosong menjadi null
-  if (idMatkul == "") idMatkul = null;
-  if (idDosen == "") idDosen = null;
-  if (idReply == "") idReply = null;
-  if (idForum == "") idForum = null;
+  if (!idMatkul || idMatkul == "") idMatkul = null;
+  if (!idDosen || idDosen == "") idDosen = null;
+  if (!idReply || idReply == "") idReply = null;
+  if (!idForum || idForum == "") idForum = null;
 
   console.log("Debug insert values:", {
     userId,
@@ -258,54 +258,134 @@ const editUlasan = asyncHandler(async (req, res) => {
 });
 
 const getAllUlasan = asyncHandler(async (req, res) => {
-  const page = parseInt(req.body.page) || 1; // Saran: Gunakan req.query untuk GET
-  const limit = parseInt(req.body.limit) || 10;
+  const userId = req.user.id_user;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
 
-  const dataUlasan = await db.execute(
-    sql`
-      SELECT 
-    r.id_review, 
-    r.id_user, 
-    r.title, 
-    r.body, 
-    r.files, 
-    r.created_at,
-    
-    COALESCE(d.name, '') AS lecturer_name, 
-    COALESCE(s.name, '') AS subject_name,
-    s.semester,
-    
-    COUNT(DISTINCT l.id_like) AS total_likes,
-    COUNT(DISTINCT b.id_bookmark) AS total_bookmarks
+  // Filter & Sort Params
+  const { from, to, sortBy = "date", order = "desc" } = req.query;
 
-    FROM reviews r
+  // 1. Base WHERE conditions (Always filter out replies)
+  const whereConditions = [isNull(reviews.id_reply)];
 
-    LEFT JOIN lecturers d ON r.id_lecturer = d.id_lecturer
-    LEFT JOIN subjects s ON r.id_subject = s.id_subject
-    LEFT JOIN like_reviews l ON r.id_review = l.id_review
-    LEFT JOIN bookmark_reviews b ON r.id_review = b.id_review
-
-    GROUP BY 
-        r.id_review, 
-        d.name, 
-        s.name, 
-        s.semester
-
-    ORDER BY r.created_at DESC
-
-    LIMIT ${limit}
-    OFFSET ${offset};
-    `
-  );
-
-  if (dataUlasan.length === 0) {
-    throw new NotFoundError("Ulasan tidak ditemukan");
+  // 2. Add Date Filtering if provided
+  if (from && to) {
+    whereConditions.push(gte(reviews.created_at, new Date(from)));
+    whereConditions.push(lte(reviews.created_at, new Date(to)));
   }
 
-  const totalResult = await db.select({ value: count() }).from(reviews);
+  // 3. Prepare Sort Logic
+  const countLikes = sql`count(distinct ${likeReviews.id_like})`;
+  const countBookmarks = sql`count(distinct ${bookmarkReviews.id_bookmark})`;
+  const countPopularity = sql`(${countLikes} + ${countBookmarks})`;
+
+  let orderByClause;
+  const isAsc = order === "asc";
+
+  switch (sortBy) {
+    case "most_like":
+      orderByClause = isAsc ? asc(countLikes) : desc(countLikes);
+      break;
+    case "most_bookmark":
+      orderByClause = isAsc ? asc(countBookmarks) : desc(countBookmarks);
+      break;
+    case "most_popular":
+      orderByClause = isAsc ? asc(countPopularity) : desc(countPopularity);
+      break;
+    case "date":
+    default:
+      orderByClause = isAsc
+        ? asc(reviews.created_at)
+        : desc(reviews.created_at);
+      break;
+  }
+
+  // 4. Data Query
+  // Note: Using Drizzle query builder for cleaner dynamic filtering/sorting
+  // tailored to the structure used in sortUlasan but adapted for pagination & joins
+  const dataUlasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      created_at: reviews.created_at,
+      updated_at: reviews.updated_at,
+
+      lecturer_name: sql`COALESCE(${lecturers.name}, '')`,
+      subject_name: sql`COALESCE(${subjects.name}, '')`,
+      semester: subjects.semester,
+
+      user_name: users.name,
+      user_image: users.image,
+      user_email: users.email,
+
+      total_likes: sql`${countLikes}`.mapWith(Number),
+      total_bookmarks: sql`${countBookmarks}`.mapWith(Number),
+      is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+      is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+    })
+    .from(reviews)
+    .leftJoin(lecturers, eq(reviews.id_lecturer, lecturers.id_lecturer))
+    .leftJoin(subjects, eq(reviews.id_subject, subjects.id_subject))
+    .leftJoin(users, eq(reviews.id_user, users.id_user))
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .where(and(...whereConditions))
+    .groupBy(
+      reviews.id_review,
+      lecturers.name,
+      subjects.name,
+      subjects.semester,
+      users.id_user,
+      users.name,
+      users.image,
+      users.email
+    )
+    .orderBy(orderByClause)
+    .limit(limit)
+    .offset(offset);
+
+  if (dataUlasan.length === 0 && page === 1) {
+    // It's acceptable to return empty list if filtering yields no results, 
+    // but if strictly following previous behavior:
+    // throw new NotFoundError("Ulasan tidak ditemukan");
+  }
+
+  // 5. Total Data Query (for pagination)
+  // We must apply the same filters to the count
+  const totalResult = await db
+    .select({ value: count() })
+    .from(reviews)
+    .where(and(...whereConditions));
+
   const totalData = totalResult[0].value;
   const totalPage = Math.ceil(totalData / limit);
+
+  const mappedData = dataUlasan.map((row) => ({
+    id_review: row.id_review,
+    id_user: row.id_user,
+    title: row.title,
+    body: row.body,
+    files: row.files,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    lecturer_name: row.lecturer_name,
+    subject_name: row.subject_name,
+    semester: row.semester,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+      email: row.user_email,
+    },
+    total_likes: row.total_likes,
+    total_bookmarks: row.total_bookmarks,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+  }));
 
   return res.status(200).json({
     status: true,
@@ -317,12 +397,13 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       totalPage: totalPage,
       hasNextPage: page < totalPage,
     },
-    data: dataUlasan,
+    data: mappedData,
   });
 });
 
 const getUlasanById = asyncHandler(async (req, res) => {
-  const { id_review } = req.body;
+  const userId = req.user.id_user;
+  const { id_review } = req.query;
 
   if (!id_review) {
     throw new BadRequestError("id_review wajib diisi");
@@ -343,12 +424,14 @@ const getUlasanById = asyncHandler(async (req, res) => {
         updated_at: reviews.updated_at,
         user: {
           id_user: users.id_user,
-          name: users.name, 
+          name: users.name,
           email: users.email,
           image: users.image, // Sesuaikan dengan field di schema (berdasarkan JSON output Anda: 'image')
         },
         total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
         total_bookmarks: sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+        is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+        is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       })
       .from(reviews)
       .leftJoin(users, eq(reviews.id_user, users.id_user))
@@ -372,6 +455,8 @@ const getUlasanById = asyncHandler(async (req, res) => {
         // Tambahkan hitungan like & bookmark di sini
         total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
         total_bookmarks: sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+        is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+        is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       })
       .from(reviews)
       .leftJoin(replier, eq(reviews.id_user, replier.id_user))
@@ -380,7 +465,7 @@ const getUlasanById = asyncHandler(async (req, res) => {
       .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
       .where(eq(reviews.id_reply, id_review))
       // Grouping wajib dilakukan agar count berfungsi per balasan
-      .groupBy(reviews.id_review, replier.id_user, replier.name, replier.image) 
+      .groupBy(reviews.id_review, replier.id_user, replier.name, replier.image)
       .orderBy(desc(reviews.created_at))
   ]);
 
@@ -667,101 +752,6 @@ const searchUlasan = asyncHandler(async (req, res) => {
   });
 });
 
-const filterUlasan = asyncHandler(async (req, res) => {
-  const { from, to } = req.body;
-
-  if (!from || !to) {
-    throw new BadRequestError("from dan to wajib diisi");
-  }
-
-  const ulasan = await db
-    .select({
-      id_review: reviews.id_review,
-      id_user: reviews.id_user,
-      id_subject: reviews.id_subject,
-      id_lecturer: reviews.id_lecturer,
-      title: reviews.title,
-      body: reviews.body,
-      files: reviews.files,
-      created_at: reviews.created_at,
-    })
-    .from(reviews)
-    .where(
-      and(
-        gte(reviews.created_at, new Date(from)),
-        lte(reviews.created_at, new Date(to))
-      )
-    );
-
-  if (ulasan.length === 0) {
-    throw new NotFoundError("Ulasan tidak ditemukan");
-  }
-
-  return res.status(200).json({
-    success: true,
-    data: ulasan,
-    message: "Success get all ulasan",
-  });
-});
-
-const sortUlasan = asyncHandler(async (req, res) => {
-  const { sortBy = "date", order = "desc" } = req.query;
-
-  const countLikes = sql`count(distinct ${likeReviews.id_like})`;
-  const countBookmarks = sql`count(distinct ${bookmarkReviews.id_bookmark})`;
-  const countPopularity = sql`(${countLikes} + ${countBookmarks})`;
-
-  let orderByClause;
-  const isAsc = order === "asc";
-
-  switch (sortBy) {
-    case "most_like":
-      orderByClause = isAsc ? asc(countLikes) : desc(countLikes);
-      break;
-    case "most_bookmark":
-      orderByClause = isAsc ? asc(countBookmarks) : desc(countBookmarks);
-      break;
-    case "most_popular":
-      orderByClause = isAsc ? asc(countPopularity) : desc(countPopularity);
-      break;
-    case "date":
-    default:
-      orderByClause = isAsc
-        ? asc(reviews.created_at)
-        : desc(reviews.created_at);
-      break;
-  }
-
-  const ulasan = await db
-    .select({
-      id_review: reviews.id_review,
-      id_user: reviews.id_user,
-      title: reviews.title,
-      body: reviews.body,
-      files: reviews.files,
-      created_at: reviews.created_at,
-      total_likes: sql`${countLikes}`.mapWith(Number),
-      total_bookmarks: sql`${countBookmarks}`.mapWith(Number),
-      popularity_score: sql`${countPopularity}`.mapWith(Number),
-    })
-    .from(reviews)
-    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
-    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
-    .groupBy(reviews.id_review)
-    .orderBy(orderByClause);
-
-  if (ulasan.length === 0) {
-    throw new NotFoundError("Ulasan tidak ditemukan");
-  }
-
-  return res.status(200).json({
-    success: true,
-    count: ulasan.length,
-    data: ulasan,
-    message: `Success get ulasan sorted by ${sortBy}`,
-  });
-});
-
 export {
   createUlasan,
   editUlasan,
@@ -775,6 +765,4 @@ export {
   getLikeUlasan,
   searchSimilarUlasan,
   searchUlasan,
-  filterUlasan,
-  sortUlasan,
 };

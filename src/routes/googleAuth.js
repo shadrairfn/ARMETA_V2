@@ -70,12 +70,10 @@ router.get(
       console.log("📌 UPDATED USER:", updated);
 
       const callbackUrl =
-        `?accessToken=${encodeURIComponent(accessToken)}`
+        `?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
 
       console.log("\n🔁 REDIRECTING TO:", callbackUrl);
-      return res.status(200).json({
-        data: callbackUrl,
-      });
+      return res.redirect(`http://localhost:3001/auth/google/callback${callbackUrl}`);
     } catch (err) {
       console.log("\n❌ CALLBACK ERROR:", err);
       return res.redirect("/login.html");
