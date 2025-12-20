@@ -175,7 +175,7 @@ const getAllForum = asyncHandler(async (req, res) => {
   const offset = (page - 1) * limit;
 
   // Filter & Sort Params
-  const { from, to, sortBy = "date", order = "desc" } = req.query;
+  const { from, to, sortBy = "date", order = "desc", id_user } = req.query;
 
   // Build WHERE clause
   let whereClause = sql`1=1`;
@@ -183,6 +183,11 @@ const getAllForum = asyncHandler(async (req, res) => {
   // Add Date Filtering if provided
   if (from && to) {
     whereClause = sql`${whereClause} AND f.created_at >= ${new Date(from)} AND f.created_at <= ${new Date(to)}`;
+  }
+
+  // Add User Filtering if provided
+  if (id_user) {
+    whereClause = sql`${whereClause} AND f.id_user = ${id_user}::uuid`;
   }
 
   // Prepare Sort Logic
@@ -618,22 +623,29 @@ const getLikeForum = asyncHandler(async (req, res) => {
   const likedForums = await db.execute(
     sql`
       SELECT 
-        f.id_forum,
-        f.id_user,
-        f.id_subject,
-        f.title,
-        f.description,
-        f.files,
-        f.created_at,
+        f.id_forum, 
+        f.id_user, 
+        f.id_subject, 
+        f.title, 
+        f.files, 
+        f.description, 
+        f.created_at, 
         f.updated_at,
         s.name as subject_name,
         u.name as user_name,
-        u.image as user_image
-      FROM like_forums l
-      JOIN reviews_forum f ON l.id_forum = f.id_forum
+        u.image as user_image,
+        (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+        (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+        (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+        EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
+        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+        f.is_anonymous
+      FROM like_forums lf
+      JOIN reviews_forum f ON lf.id_forum = f.id_forum
       LEFT JOIN users u ON f.id_user = u.id_user
       LEFT JOIN subjects s ON f.id_subject = s.id_subject
-      WHERE l.id_user = ${userId}
+      WHERE lf.id_user = ${userId}
+      ORDER BY f.created_at DESC
     `
   );
 
@@ -643,15 +655,25 @@ const getLikeForum = asyncHandler(async (req, res) => {
     id_subject: row.id_subject,
     subject_name: row.subject_name,
     title: row.title,
-    description: row.description,
     files: row.files,
+    description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
     },
+    total_like: row.total_like,
+    total_bookmark: row.total_bookmark,
+    total_reply: row.total_reply,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   return res.status(200).json({
@@ -671,22 +693,29 @@ const getBookmarkForum = asyncHandler(async (req, res) => {
   const bookmarkedForums = await db.execute(
     sql`
       SELECT 
-        f.id_forum,
-        f.id_user,
-        f.id_subject,
-        f.title,
-        f.description,
-        f.files,
-        f.created_at,
+        f.id_forum, 
+        f.id_user, 
+        f.id_subject, 
+        f.title, 
+        f.files, 
+        f.description, 
+        f.created_at, 
         f.updated_at,
         s.name as subject_name,
         u.name as user_name,
-        u.image as user_image
-      FROM bookmark_forums b
-      JOIN reviews_forum f ON b.id_forum = f.id_forum
+        u.image as user_image,
+        (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+        (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+        (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+        EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
+        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+        f.is_anonymous
+      FROM bookmark_forums bf
+      JOIN reviews_forum f ON bf.id_forum = f.id_forum
       LEFT JOIN users u ON f.id_user = u.id_user
       LEFT JOIN subjects s ON f.id_subject = s.id_subject
-      WHERE b.id_user = ${userId}
+      WHERE bf.id_user = ${userId}
+      ORDER BY f.created_at DESC
     `
   );
 
@@ -696,15 +725,25 @@ const getBookmarkForum = asyncHandler(async (req, res) => {
     id_subject: row.id_subject,
     subject_name: row.subject_name,
     title: row.title,
-    description: row.description,
     files: row.files,
+    description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
     },
+    total_like: row.total_like,
+    total_bookmark: row.total_bookmark,
+    total_reply: row.total_reply,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   return res.status(200).json({
