@@ -41,6 +41,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   bookmarkReviews: many(bookmarkReviews),
   reports: many(reports),
   likeReviews: many(likeReviews),
+  likeForums: many(likeForums),
+  bookmarkForums: many(bookmarkForums),
 }));
 
 export const lecturers = pgTable("lecturers", {
@@ -145,6 +147,36 @@ export const reviewsForum = pgTable("reviews_forum", {
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 })
+
+export const reviewsForumRelations = relations(reviewsForum, ({ one, many }) => ({
+  user: one(users, { fields: [reviewsForum.id_user], references: [users.id_user] }),
+  subject: one(subjects, { fields: [reviewsForum.id_subject], references: [subjects.id_subject] }),
+  likeForums: many(likeForums),
+  bookmarkForums: many(bookmarkForums),
+  reviews: many(reviews),
+}));
+
+export const likeForums = pgTable("like_forums", {
+  id_like: uuid("id_like").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  id_forum: uuid("id_forum").references(() => reviewsForum.id_forum, { onDelete: "cascade" }).notNull(),
+});
+
+export const likeForumsRelations = relations(likeForums, ({ one }) => ({
+  user: one(users, { fields: [likeForums.id_user], references: [users.id_user] }),
+  forum: one(reviewsForum, { fields: [likeForums.id_forum], references: [reviewsForum.id_forum] }),
+}));
+
+export const bookmarkForums = pgTable("bookmark_forums", {
+  id_bookmark: uuid("id_bookmark").defaultRandom().primaryKey().notNull(),
+  id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
+  id_forum: uuid("id_forum").references(() => reviewsForum.id_forum, { onDelete: "cascade" }).notNull(),
+});
+
+export const bookmarkForumsRelations = relations(bookmarkForums, ({ one }) => ({
+  user: one(users, { fields: [bookmarkForums.id_user], references: [users.id_user] }),
+  forum: one(reviewsForum, { fields: [bookmarkForums.id_forum], references: [reviewsForum.id_forum] }),
+}));
 
 export const chatbotHistory = pgTable("chatbot_history", {
   id_chatbot: uuid("id_chatbot").defaultRandom().primaryKey().notNull(),

@@ -127,9 +127,20 @@ const createUlasan = asyncHandler(async (req, res) => {
   });
 
   // Eksekusi Query Database
+  // Using explicit NULL handling for UUID columns to avoid empty string issues
   const result = await db.execute(
     sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, id_forum, title, body, files, vectorize)
-        VALUES (${userId}, ${idMatkul}, ${idDosen}, ${idReply}, ${idForum}, ${judulUlasan}, ${textUlasan}, ${filesJson}, ${vectorString}::vector)
+        VALUES (
+          ${userId}, 
+          ${idMatkul ? idMatkul : sql`NULL`}::uuid, 
+          ${idDosen ? idDosen : sql`NULL`}::uuid, 
+          ${idReply ? idReply : sql`NULL`}::uuid, 
+          ${idForum ? idForum : sql`NULL`}::uuid, 
+          ${judulUlasan}, 
+          ${textUlasan}, 
+          ${filesJson}::jsonb, 
+          ${vectorString}::vector
+        )
         RETURNING *`
   );
 
@@ -266,8 +277,8 @@ const getAllUlasan = asyncHandler(async (req, res) => {
   // Filter & Sort Params
   const { from, to, sortBy = "date", order = "desc" } = req.query;
 
-  // 1. Base WHERE conditions (Always filter out replies)
-  const whereConditions = [isNull(reviews.id_reply)];
+  // 1. Base WHERE conditions (Always filter out replies and forum content)
+  const whereConditions = [isNull(reviews.id_reply), isNull(reviews.id_forum)];
 
   // 2. Add Date Filtering if provided
   if (from && to) {
@@ -293,6 +304,10 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     case "most_popular":
       orderByClause = isAsc ? asc(countPopularity) : desc(countPopularity);
       break;
+    case "most_reply":
+      const countReplies = sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`;
+      orderByClause = isAsc ? asc(countReplies) : desc(countReplies);
+      break;
     case "date":
     default:
       orderByClause = isAsc
@@ -308,6 +323,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     .select({
       id_review: reviews.id_review,
       id_user: reviews.id_user,
+      id_forum: reviews.id_forum,
       title: reviews.title,
       body: reviews.body,
       files: reviews.files,
@@ -324,6 +340,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
 
       total_likes: sql`${countLikes}`.mapWith(Number),
       total_bookmarks: sql`${countBookmarks}`.mapWith(Number),
+      total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
       is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
     })
@@ -383,6 +400,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     },
     total_likes: row.total_likes,
     total_bookmarks: row.total_bookmarks,
+    total_reply: row.total_reply,
     is_liked: row.is_liked,
     is_bookmarked: row.is_bookmarked,
   }));
@@ -430,6 +448,7 @@ const getUlasanById = asyncHandler(async (req, res) => {
         },
         total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
         total_bookmarks: sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+        total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
         is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
         is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       })
@@ -455,6 +474,7 @@ const getUlasanById = asyncHandler(async (req, res) => {
         // Tambahkan hitungan like & bookmark di sini
         total_likes: sql`count(distinct ${likeReviews.id_like})`.mapWith(Number),
         total_bookmarks: sql`count(distinct ${bookmarkReviews.id_bookmark})`.mapWith(Number),
+        total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
         is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
         is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       })

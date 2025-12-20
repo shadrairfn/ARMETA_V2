@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
-import { reviews, users, reviewsForum } from "../db/schema/schema.js";
+import { reviews, users, reviewsForum, likeForums, bookmarkForums, subjects } from "../db/schema/schema.js";
 import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -37,15 +37,15 @@ const createForum = asyncHandler(async (req, res) => {
   if (!userId) {
     throw new UnauthorizedError("Unauthorized - Please login");
   }
-  
+
   const { title, description, id_subject } = req.body;
 
   if (!title || !id_subject) {
     throw new BadRequestError("title dan id_subject wajib diisi");
   }
 
-// 2. Upload ke Supabase (Hanya jika ada file)
-const fileUploaded = req.files || []; // Pastikan ini array (dari multer)
+  // 2. Upload ke Supabase (Hanya jika ada file)
+  const fileUploaded = req.files || []; // Pastikan ini array (dari multer)
   const fileLocalLinks = [];
 
   // Nama bucket Anda di Supabase (sesuaikan dengan yang dibuat di dashboard)
@@ -134,95 +134,163 @@ const searchForum = asyncHandler(async (req, res) => {
     message: "Pencarian berhasil",
   });
 });
- 
-const filterForum = asyncHandler(async (req, res) => {
-  const { from, to } = req.body;
-
-  if (!from || !to) {
-    throw new BadRequestError("from dan to wajib diisi");
-  }
-
-  const forum = await db
-    .select({
-      id_forum: reviewsForum.id_forum,
-      id_user: reviewsForum.id_user,
-      id_subject: reviewsForum.id_subject,
-      title: reviewsForum.title,
-      description: reviewsForum.description,
-      created_at: reviewsForum.created_at,
-    })
-    .from(reviewsForum)
-    .where(
-      and(
-        gte(reviewsForum.created_at, new Date(from)),
-        lte(reviewsForum.created_at, new Date(to))
-      )
-    );
-
-  if (forum.length === 0) {
-    throw new NotFoundError("Forum not found");
-  }
-
-  return res.status(200).json({
-    success: true,
-    data: forum,
-    message: "Success get all forum",
-  });
-});
 
 const getAllForum = asyncHandler(async (req, res) => {
-  const forum = await db
-  .select({
-    id_forum: reviewsForum.id_forum,
-    id_user: reviewsForum.id_user,
-    id_subject: reviewsForum.id_subject,
-    title: reviewsForum.title,
-    files: reviewsForum.files,
-    description: reviewsForum.description,
-    created_at: reviewsForum.created_at,
-  })
-  .from(reviewsForum);
+  const userId = req.user?.id_user;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = (page - 1) * limit;
 
-  if (!forum) {
-    throw new NotFoundError("Forum not found");
+  // Filter & Sort Params
+  const { from, to, sortBy = "date", order = "desc" } = req.query;
+
+  // Build WHERE clause
+  let whereClause = sql`1=1`;
+
+  // Add Date Filtering if provided
+  if (from && to) {
+    whereClause = sql`${whereClause} AND f.created_at >= ${new Date(from)} AND f.created_at <= ${new Date(to)}`;
   }
+
+  // Prepare Sort Logic
+  let orderByClause;
+  const isAsc = order === "asc";
+
+  switch (sortBy) {
+    case "most_like":
+      orderByClause = isAsc
+        ? sql`total_like ASC`
+        : sql`total_like DESC`;
+      break;
+    case "most_bookmark":
+      orderByClause = isAsc
+        ? sql`total_bookmark ASC`
+        : sql`total_bookmark DESC`;
+      break;
+    case "most_popular":
+      orderByClause = isAsc
+        ? sql`(total_like + total_bookmark) ASC`
+        : sql`(total_like + total_bookmark) DESC`;
+      break;
+    case "most_reply":
+      orderByClause = isAsc
+        ? sql`total_reply ASC`
+        : sql`total_reply DESC`;
+      break;
+    case "date":
+    default:
+      orderByClause = isAsc
+        ? sql`f.created_at ASC`
+        : sql`f.created_at DESC`;
+      break;
+  }
+
+  // Data Query with dynamic WHERE and ORDER BY
+  const forumData = await db.execute(sql`
+    SELECT 
+      f.id_forum, 
+      f.id_user, 
+      f.id_subject, 
+      f.title, 
+      f.files, 
+      f.description, 
+      f.created_at, 
+      f.updated_at,
+      s.name as subject_name,
+      u.name as user_name,
+      u.image as user_image,
+      (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+      (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+      (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+      EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+    FROM reviews_forum f
+    LEFT JOIN users u ON f.id_user = u.id_user
+    LEFT JOIN subjects s ON f.id_subject = s.id_subject
+    WHERE ${whereClause}
+    ORDER BY ${orderByClause}
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+
+  const rows = forumData.rows;
+
+  // Total count query with same WHERE conditions
+  const totalResult = await db.execute(sql`
+    SELECT count(*)::int as count
+    FROM reviews_forum f
+    WHERE ${whereClause}
+  `);
+
+  const totalData = Number(totalResult.rows[0].count);
+  const totalPage = Math.ceil(totalData / limit);
+
+  const mappedData = rows.map((row) => ({
+    id_forum: row.id_forum,
+    id_user: row.id_user,
+    id_subject: row.id_subject,
+    subject_name: row.subject_name,
+    title: row.title,
+    files: row.files,
+    description: row.description,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+    },
+    total_like: row.total_like,
+    total_bookmark: row.total_bookmark,
+    total_reply: row.total_reply,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+  }));
 
   return res.status(200).json({
     success: true,
-    data: forum,
     message: "Success get all forum",
+    pagination: {
+      currentPage: page,
+      limit: limit,
+      totalData: totalData,
+      totalPage: totalPage,
+      hasNextPage: page < totalPage,
+    },
+    data: mappedData,
   });
 });
 
 const getForumById = asyncHandler(async (req, res) => {
-  const { id_forum } = req.body;
+  const userId = req.user?.id_user;
+  const { id_forum } = req.query;
 
   if (!id_forum) {
     throw new BadRequestError("id_forum wajib diisi");
   }
 
-  // Kita gunakan alias untuk pembuat forum (opsional, agar membedakan dengan penulis review)
-  const forumCreator = alias(users, "forumCreator");
-
   const [forumResult, reviewsResult] = await Promise.all([
     // 1. Query Data Forum (dan pembuat forumnya)
-    db
-      .select({
-        id_forum: reviewsForum.id_forum,
-        title: reviewsForum.title,
-        description: reviewsForum.description,
-        files: reviewsForum.files,
-        created_at: reviewsForum.created_at,
-        // Info User Pembuat Forum
-        creator: {
-          id_user: forumCreator.id_user,
-          name: forumCreator.name,
-          image: forumCreator.image, // Sesuaikan dengan schema users (image/avatar)
-        },
-      })
-      .from(reviewsForum)
-      .leftJoin(forumCreator, eq(reviewsForum.id_user, forumCreator.id_user))
-      .where(eq(reviewsForum.id_forum, id_forum)),
+    db.execute(sql`
+      SELECT 
+        f.id_forum, 
+        f.id_user, 
+        f.title, 
+        f.description, 
+        f.files, 
+        f.created_at, 
+        f.updated_at,
+        u.id_user as "user.id_user",
+        u.name as "user.name",
+        u.image as "user.image",
+        (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+        (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+        (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+        EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
+        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+      FROM reviews_forum f
+      LEFT JOIN users u ON f.id_user = u.id_user
+      WHERE f.id_forum = ${id_forum}::uuid
+    `),
 
     // 2. Query User yang melakukan Ulasan di Forum tersebut
     db
@@ -233,19 +301,48 @@ const getForumById = asyncHandler(async (req, res) => {
         files: reviews.files,
         created_at: reviews.created_at,
         // Info User Penulis Ulasan
-        reviewer: {
+        user: {
           id_user: users.id_user,
           name: users.name,
-          image: users.image, // Sesuaikan dengan schema users
+          image: users.image,
         },
+        total_like: sql`(SELECT count(*)::int FROM like_reviews l WHERE l.id_review = ${reviews.id_review})`.as('total_like'),
+        total_bookmark: sql`(SELECT count(*)::int FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review})`.as('total_bookmark'),
+        total_reply: sql`(SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = ${reviews.id_review})`.as('total_reply'),
+        is_liked: sql`EXISTS (SELECT 1 FROM like_reviews l WHERE l.id_review = ${reviews.id_review} AND l.id_user = ${userId}::uuid)`.as('is_liked'),
+        is_bookmarked: sql`EXISTS (SELECT 1 FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review} AND b.id_user = ${userId}::uuid)`.as('is_bookmarked')
       })
       .from(reviews)
-      .leftJoin(users, eq(reviews.id_user, users.id_user)) // Join review ke user
-      .where(eq(reviews.id_forum, id_forum)) // Filter berdasarkan id_forum
-      .orderBy(desc(reviews.created_at)), // Urutkan ulasan terbaru
+      .leftJoin(users, eq(reviews.id_user, users.id_user))
+      .where(eq(reviews.id_forum, id_forum))
+      .orderBy(desc(reviews.created_at)),
   ]);
 
-  const forum = forumResult[0];
+  const forumRow = forumResult.rows[0];
+
+  if (!forumRow) {
+    throw new NotFoundError("Forum not found");
+  }
+
+  // Map result for forumRow to nested user object
+  const forum = {
+    id_forum: forumRow.id_forum,
+    title: forumRow.title,
+    description: forumRow.description,
+    files: forumRow.files,
+    created_at: forumRow.created_at,
+    updated_at: forumRow.updated_at,
+    user: {
+      id_user: forumRow["user.id_user"],
+      name: forumRow["user.name"],
+      image: forumRow["user.image"],
+    },
+    total_like: forumRow.total_like,
+    total_bookmark: forumRow.total_bookmark,
+    total_reply: forumRow.total_reply,
+    is_liked: forumRow.is_liked,
+    is_bookmarked: forumRow.is_bookmarked,
+  };
 
   if (!forum) {
     throw new NotFoundError("Forum not found");
@@ -254,7 +351,7 @@ const getForumById = asyncHandler(async (req, res) => {
   // Gabungkan hasil
   const responseData = {
     ...forum,
-    reviews: reviewsResult, // List ulasan beserta user-nya
+    reviews: reviewsResult,
   };
 
   return res.status(200).json({
@@ -265,34 +362,378 @@ const getForumById = asyncHandler(async (req, res) => {
 });
 
 const getForumBySubject = asyncHandler(async (req, res) => {
+  const userId = req.user?.id_user;
   const { id_subject } = req.body;
 
   if (!id_subject) {
     throw new BadRequestError("id_subject wajib diisi");
   }
 
-  const forums = await db
-    .select({
-      id_forum: reviewsForum.id_forum,
-      id_user: reviewsForum.id_user,
-      id_subject: reviewsForum.id_subject,
-      title: reviewsForum.title,
-      files: reviewsForum.files,
-      description: reviewsForum.description,
-      created_at: reviewsForum.created_at,
-    })
-    .from(reviewsForum)
-    .where(eq(reviewsForum.id_subject, id_subject));
-  
-  if (forums.length === 0) {
+  const forumsResult = await db.execute(sql`
+    SELECT 
+      f.id_forum, 
+      f.id_user, 
+      f.id_subject, 
+      f.title, 
+      f.files, 
+      f.description, 
+      f.created_at, 
+      f.updated_at,
+      s.name as subject_name,
+      u.name as user_name,
+      u.image as user_image,
+      (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+      (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+      (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+      EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+    FROM reviews_forum f
+    LEFT JOIN users u ON f.id_user = u.id_user
+    LEFT JOIN subjects s ON f.id_subject = s.id_subject
+    WHERE f.id_subject = ${id_subject}::uuid
+  `);
+
+  const forumRows = forumsResult.rows;
+
+  if (forumRows.length === 0) {
     throw new NotFoundError("Forum not found");
   }
 
+  const mappedData = forumRows.map((row) => ({
+    id_forum: row.id_forum,
+    id_user: row.id_user,
+    id_subject: row.id_subject,
+    subject_name: row.subject_name,
+    title: row.title,
+    files: row.files,
+    description: row.description,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+    },
+    total_like: row.total_like,
+    total_bookmark: row.total_bookmark,
+    total_reply: row.total_reply,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+  }));
+
   return res.status(200).json({
     success: true,
-    data: forums,
+    data: mappedData,
     message: "Success get all forums",
   });
 });
 
-export { createForum, getForumBySubject, searchForum, filterForum, getAllForum, getForumById };
+const likeForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_forum } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+
+  const existingLike = await db.execute(
+    sql`SELECT * FROM like_forums
+        WHERE id_user = ${userId} AND id_forum = ${id_forum}`
+  );
+
+  if (existingLike.rows.length >= 1) {
+    throw new BadRequestError("User sudah like forum ini");
+  }
+
+  const result = await db.execute(
+    sql`INSERT INTO like_forums (id_user, id_forum)
+        VALUES (${userId}, ${id_forum})
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data: result.rows[0],
+    success: true,
+    message: "Success like forum",
+  });
+});
+
+const unlikeForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_forum } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+
+  const existingLike = await db.execute(
+    sql`SELECT * FROM like_forums
+        WHERE id_user = ${userId} AND id_forum = ${id_forum}`
+  );
+
+  if (existingLike.rows.length == 0) {
+    throw new BadRequestError("User belum like forum ini");
+  }
+
+  const result = await db.execute(
+    sql`DELETE FROM like_forums
+        WHERE id_user = ${userId} AND id_forum = ${id_forum}
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data: result.rows[0],
+    success: true,
+    message: "Success unlike forum",
+  });
+});
+
+const bookmarkForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_forum } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+
+  const existingBookmark = await db.execute(
+    sql`SELECT * FROM bookmark_forums
+        WHERE id_user = ${userId} AND id_forum = ${id_forum}`
+  );
+
+  if (existingBookmark.rows.length >= 1) {
+    throw new BadRequestError("User sudah bookmark forum ini");
+  }
+
+  const result = await db.execute(
+    sql`INSERT INTO bookmark_forums (id_user, id_forum)
+        VALUES (${userId}, ${id_forum})
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data: result.rows[0],
+    success: true,
+    message: "Success bookmark forum",
+  });
+});
+
+const unbookmarkForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_forum } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+
+  const existingBookmark = await db.execute(
+    sql`SELECT * FROM bookmark_forums
+        WHERE id_user = ${userId} AND id_forum = ${id_forum}`
+  );
+
+  if (existingBookmark.rows.length == 0) {
+    throw new BadRequestError("User belum bookmark forum ini");
+  }
+
+  const result = await db.execute(
+    sql`DELETE FROM bookmark_forums
+        WHERE id_user = ${userId} AND id_forum = ${id_forum}
+        RETURNING *`
+  );
+
+  return res.status(200).json({
+    data: result.rows[0],
+    success: true,
+    message: "Success unbookmark forum",
+  });
+});
+
+const getLikeForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+
+  if (!userId) {
+    throw new BadRequestError("id_user wajib diisi");
+  }
+
+  const likedForums = await db.execute(
+    sql`
+      SELECT 
+        f.id_forum,
+        f.id_user,
+        f.id_subject,
+        f.title,
+        f.description,
+        f.files,
+        f.created_at,
+        f.updated_at,
+        s.name as subject_name,
+        u.name as user_name,
+        u.image as user_image
+      FROM like_forums l
+      JOIN reviews_forum f ON l.id_forum = f.id_forum
+      LEFT JOIN users u ON f.id_user = u.id_user
+      LEFT JOIN subjects s ON f.id_subject = s.id_subject
+      WHERE l.id_user = ${userId}
+    `
+  );
+
+  const mappedData = likedForums.rows.map((row) => ({
+    id_forum: row.id_forum,
+    id_user: row.id_user,
+    id_subject: row.id_subject,
+    subject_name: row.subject_name,
+    title: row.title,
+    description: row.description,
+    files: row.files,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+    },
+  }));
+
+  return res.status(200).json({
+    data: mappedData,
+    success: true,
+    message: "Success get liked forums",
+  });
+});
+
+const getBookmarkForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+
+  if (!userId) {
+    throw new BadRequestError("id_user wajib diisi");
+  }
+
+  const bookmarkedForums = await db.execute(
+    sql`
+      SELECT 
+        f.id_forum,
+        f.id_user,
+        f.id_subject,
+        f.title,
+        f.description,
+        f.files,
+        f.created_at,
+        f.updated_at,
+        s.name as subject_name,
+        u.name as user_name,
+        u.image as user_image
+      FROM bookmark_forums b
+      JOIN reviews_forum f ON b.id_forum = f.id_forum
+      LEFT JOIN users u ON f.id_user = u.id_user
+      LEFT JOIN subjects s ON f.id_subject = s.id_subject
+      WHERE b.id_user = ${userId}
+    `
+  );
+
+  const mappedData = bookmarkedForums.rows.map((row) => ({
+    id_forum: row.id_forum,
+    id_user: row.id_user,
+    id_subject: row.id_subject,
+    subject_name: row.subject_name,
+    title: row.title,
+    description: row.description,
+    files: row.files,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+    },
+  }));
+
+  return res.status(200).json({
+    data: mappedData,
+    success: true,
+    message: "Success get bookmarked forums",
+  });
+});
+
+const searchSimilarForum = asyncHandler(async (req, res) => {
+  const { query, limit = 5 } = req.body;
+
+  if (!query || query.trim().length === 0) {
+    throw new BadRequestError("Query text wajib diisi");
+  }
+
+  // Generate query embedding
+  console.log("🔍 Generating query embedding for forum search...");
+  const queryEmbedding = await generateEmbedding(query);
+  console.log("✅ Query embedding generated");
+
+  // Search for similar forums using cosine similarity
+  // Note: This requires reviews_forum table to have a vectorize column
+  // If not available, we fall back to text search
+  try {
+    const similarForums = await db.execute(
+      `SELECT
+        f.id_forum,
+        f.id_user,
+        f.id_subject,
+        f.title,
+        f.description,
+        f.files,
+        f.created_at,
+        (f.vectorize <=> $1::vector) as distance,
+        (1 - (f.vectorize <=> $1::vector)) as similarity
+      FROM reviews_forum f
+      WHERE f.vectorize IS NOT NULL
+      ORDER BY f.vectorize <=> $1::vector
+      LIMIT $2`,
+      [JSON.stringify(queryEmbedding), limit]
+    );
+
+    return successResponse(res, 200, "Pencarian berhasil", {
+      query,
+      results: similarForums.rows,
+      count: similarForums.rows.length,
+    });
+  } catch (error) {
+    // Fallback to text search if vector search fails
+    console.log("Vector search failed, falling back to text search:", error.message);
+    const searchPattern = `%${query}%`;
+
+    const textSearchResults = await db.execute(
+      sql`
+        SELECT 
+          f.id_forum,
+          f.id_user,
+          f.id_subject,
+          f.title,
+          f.description,
+          f.files,
+          f.created_at
+        FROM reviews_forum f
+        WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern}
+        LIMIT ${limit}
+      `
+    );
+
+    return successResponse(res, 200, "Pencarian berhasil (text search)", {
+      query,
+      results: textSearchResults.rows,
+      count: textSearchResults.rows.length,
+    });
+  }
+});
+
+export {
+  createForum,
+  getForumBySubject,
+  searchForum,
+  getAllForum,
+  getForumById,
+  likeForum,
+  unlikeForum,
+  bookmarkForum,
+  unbookmarkForum,
+  getLikeForum,
+  getBookmarkForum,
+  searchSimilarForum
+};
+
