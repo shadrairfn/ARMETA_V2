@@ -733,7 +733,8 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
 });
 
 const searchUlasan = asyncHandler(async (req, res) => {
-  const { q } = req.body;
+  const userId = req.user?.id_user;
+  const { q } = req.query;
   if (!q) {
     return res.status(400).json({
       message: "Silakan masukkan kata kunci pencarian.",
@@ -742,32 +743,88 @@ const searchUlasan = asyncHandler(async (req, res) => {
 
   const searchPattern = `%${q}%`;
 
-  const searchResults = await db.execute(
-    sql`
-      SELECT *
-      FROM reviews
-      WHERE title ILIKE ${searchPattern}
-      LIMIT 20
-    `
-  );
+  // Note: Standardizing with getAllUlasan data structure
+  const countLikes = sql`count(distinct ${likeReviews.id_like})`;
+  const countBookmarks = sql`count(distinct ${bookmarkReviews.id_bookmark})`;
 
-  const results = [];
-  for (const row of searchResults.rows) {
-    results.push({
-      id_review: row.id_review,
-      title: row.title,
-      files: row.files,
-      created_at: row.created_at,
-    });
-  }
+  const dataUlasan = await db
+    .select({
+      id_review: reviews.id_review,
+      id_user: reviews.id_user,
+      id_forum: reviews.id_forum,
+      title: reviews.title,
+      body: reviews.body,
+      files: reviews.files,
+      created_at: reviews.created_at,
+      updated_at: reviews.updated_at,
 
-  if (results.length === 0) {
-    throw new NotFoundError("Ulasan not found");
-  }
+      lecturer_name: sql`COALESCE(${lecturers.name}, '')`,
+      subject_name: sql`COALESCE(${subjects.name}, '')`,
+      semester: subjects.semester,
+
+      user_name: users.name,
+      user_image: users.image,
+      user_email: users.email,
+
+      total_likes: sql`${countLikes}`.mapWith(Number),
+      total_bookmarks: sql`${countBookmarks}`.mapWith(Number),
+      total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
+      is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+      is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+    })
+    .from(reviews)
+    .leftJoin(lecturers, eq(reviews.id_lecturer, lecturers.id_lecturer))
+    .leftJoin(subjects, eq(reviews.id_subject, subjects.id_subject))
+    .leftJoin(users, eq(reviews.id_user, users.id_user))
+    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
+    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
+    .where(
+      and(
+        isNull(reviews.id_reply), // Only top-level reviews
+        sql`(${reviews.title} ILIKE ${searchPattern} OR ${reviews.body} ILIKE ${searchPattern})`
+      )
+    )
+    .groupBy(
+      reviews.id_review,
+      lecturers.id_lecturer,
+      lecturers.name,
+      subjects.name,
+      subjects.semester,
+      users.id_user,
+      users.name,
+      users.image,
+      users.email
+    )
+    .orderBy(desc(reviews.created_at))
+    .limit(20);
+
+  const mappedData = dataUlasan.map((row) => ({
+    id_review: row.id_review,
+    id_user: row.id_user,
+    title: row.title,
+    body: row.body,
+    files: row.files,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    lecturer_name: row.lecturer_name,
+    subject_name: row.subject_name,
+    semester: row.semester,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+      email: row.user_email,
+    },
+    total_likes: row.total_likes,
+    total_bookmarks: row.total_bookmarks,
+    total_reply: row.total_reply,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+  }));
 
   res.status(200).json({
-    status: "success",
-    data: results,
+    status: true,
+    data: mappedData,
     message: "Pencarian berhasil",
   });
 });

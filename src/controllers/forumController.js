@@ -96,7 +96,8 @@ const createForum = asyncHandler(async (req, res) => {
 });
 
 const searchForum = asyncHandler(async (req, res) => {
-  const { q } = req.body;
+  const userId = req.user?.id_user;
+  const { q } = req.query;
 
   if (!q) {
     return res.status(400).json({
@@ -106,31 +107,57 @@ const searchForum = asyncHandler(async (req, res) => {
 
   const searchPattern = `%${q}%`;
 
-  const searchResults = await db.execute(
-    sql`
-      SELECT *
-      FROM reviews_forum
-      WHERE title ILIKE ${searchPattern}
-      LIMIT 20
-    `
-  );
+  const searchResults = await db.execute(sql`
+    SELECT 
+      f.id_forum, 
+      f.id_user, 
+      f.id_subject, 
+      f.title, 
+      f.files, 
+      f.description, 
+      f.created_at, 
+      f.updated_at,
+      s.name as subject_name,
+      u.name as user_name,
+      u.image as user_image,
+      (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+      (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+      (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+      EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+    FROM reviews_forum f
+    LEFT JOIN users u ON f.id_user = u.id_user
+    LEFT JOIN subjects s ON f.id_subject = s.id_subject
+    WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern}
+    ORDER BY f.created_at DESC
+    LIMIT 20
+  `);
 
-  const results = [];
-  for (const row of searchResults.rows) {
-    results.push({
-      id_forum: row.id_forum,
-      title: row.title,
-      created_at: row.created_at,
-    });
-  }
-
-  if (results.length === 0) {
-    throw new NotFoundError("Forum not found");
-  }
+  const mappedData = searchResults.rows.map((row) => ({
+    id_forum: row.id_forum,
+    id_user: row.id_user,
+    id_subject: row.id_subject,
+    subject_name: row.subject_name,
+    title: row.title,
+    files: row.files,
+    description: row.description,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    user: {
+      id_user: row.id_user,
+      name: row.user_name,
+      image: row.user_image,
+    },
+    total_like: row.total_like,
+    total_bookmark: row.total_bookmark,
+    total_reply: row.total_reply,
+    is_liked: row.is_liked,
+    is_bookmarked: row.is_bookmarked,
+  }));
 
   res.status(200).json({
-    status: "success",
-    data: results,
+    success: true,
+    data: mappedData,
     message: "Pencarian berhasil",
   });
 });
