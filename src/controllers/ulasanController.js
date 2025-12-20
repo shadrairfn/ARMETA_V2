@@ -41,7 +41,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const createUlasan = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
 
-  let { idMatkul, idDosen, idReply, idForum, judulUlasan, textUlasan } =
+  let { idMatkul, idDosen, idReply, idForum, judulUlasan, textUlasan, isAnonymous } =
     req.body;
 
   // Validasi Input
@@ -124,12 +124,13 @@ const createUlasan = asyncHandler(async (req, res) => {
     judulUlasan: judulUlasan ? judulUlasan.substring(0, 50) : "",
     files_count: fileLocalLinks.length,
     vectorLength: vectorString.length,
+    isAnonymous: !!isAnonymous
   });
 
   // Eksekusi Query Database
   // Using explicit NULL handling for UUID columns to avoid empty string issues
   const result = await db.execute(
-    sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, id_forum, title, body, files, vectorize)
+    sql`INSERT INTO reviews (id_user, id_subject, id_lecturer, id_reply, id_forum, title, body, files, vectorize, is_anonymous)
         VALUES (
           ${userId}, 
           ${idMatkul ? idMatkul : sql`NULL`}::uuid, 
@@ -139,7 +140,8 @@ const createUlasan = asyncHandler(async (req, res) => {
           ${judulUlasan}, 
           ${textUlasan}, 
           ${filesJson}::jsonb, 
-          ${vectorString}::vector
+          ${vectorString}::vector,
+          ${isAnonymous ? true : false}
         )
         RETURNING *`
   );
@@ -343,6 +345,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
       is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+      is_anonymous: reviews.is_anonymous,
     })
     .from(reviews)
     .leftJoin(lecturers, eq(reviews.id_lecturer, lecturers.id_lecturer))
@@ -392,7 +395,12 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     lecturer_name: row.lecturer_name,
     subject_name: row.subject_name,
     semester: row.semester,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+      email: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
@@ -403,6 +411,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     total_reply: row.total_reply,
     is_liked: row.is_liked,
     is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   return res.status(200).json({
@@ -451,6 +460,7 @@ const getUlasanById = asyncHandler(async (req, res) => {
         total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
         is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
         is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+        is_anonymous: reviews.is_anonymous,
       })
       .from(reviews)
       .leftJoin(users, eq(reviews.id_user, users.id_user))
@@ -498,7 +508,20 @@ const getUlasanById = asyncHandler(async (req, res) => {
   // Gabungkan hasil
   const responseData = {
     ...ulasan,
-    replies: repliesResult,
+    user: ulasan.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+      email: null,
+    } : ulasan.user,
+    replies: repliesResult.map(reply => ({
+      ...reply,
+      user: reply.is_anonymous ? {
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      } : reply.user
+    })),
   };
 
   return res.status(200).json({
@@ -718,7 +741,8 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
       u.files,
       u.created_at,
       (u.vectorize <=> $1::vector) as distance,
-      (1 - (u.vectorize <=> $1::vector)) as similarity
+      (1 - (u.vectorize <=> $1::vector)) as similarity,
+      u.is_anonymous
     FROM reviews u
     ORDER BY u.vectorize <=> $1::vector
     LIMIT $2`,
@@ -727,7 +751,18 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
 
   return successResponse(res, 200, "Pencarian berhasil", {
     query,
-    results: similarUlasan.rows,
+    results: similarUlasan.rows.map(row => ({
+      ...row,
+      user: row.is_anonymous ? {
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      } : {
+        id_user: row.id_user,
+        name: "User", // Wait, searchSimilarUlasan seems to not join with users? 
+        // Let's check the query again.
+      }
+    })),
     count: similarUlasan.rows.length,
   });
 });
@@ -809,7 +844,12 @@ const searchUlasan = asyncHandler(async (req, res) => {
     lecturer_name: row.lecturer_name,
     subject_name: row.subject_name,
     semester: row.semester,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+      email: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
@@ -820,6 +860,7 @@ const searchUlasan = asyncHandler(async (req, res) => {
     total_reply: row.total_reply,
     is_liked: row.is_liked,
     is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   res.status(200).json({

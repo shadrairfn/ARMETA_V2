@@ -38,7 +38,7 @@ const createForum = asyncHandler(async (req, res) => {
     throw new UnauthorizedError("Unauthorized - Please login");
   }
 
-  const { title, description, id_subject } = req.body;
+  const { title, description, id_subject, isAnonymous } = req.body;
 
   if (!title || !id_subject) {
     throw new BadRequestError("title dan id_subject wajib diisi");
@@ -83,8 +83,8 @@ const createForum = asyncHandler(async (req, res) => {
   const filesJson = JSON.stringify(fileLocalLinks);
 
   const result = await db.execute(
-    sql`INSERT INTO reviews_forum (id_user, id_subject, title, description, files)
-          VALUES (${userId}, ${id_subject}, ${title}, ${description}, ${filesJson})
+    sql`INSERT INTO reviews_forum (id_user, id_subject, title, description, files, is_anonymous)
+          VALUES (${userId}, ${id_subject}, ${title}, ${description}, ${filesJson}, ${isAnonymous ? true : false})
           RETURNING *`
   );
 
@@ -124,7 +124,8 @@ const searchForum = asyncHandler(async (req, res) => {
       (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
       (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
       EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
-      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+      f.is_anonymous
     FROM reviews_forum f
     LEFT JOIN users u ON f.id_user = u.id_user
     LEFT JOIN subjects s ON f.id_subject = s.id_subject
@@ -143,7 +144,11 @@ const searchForum = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
@@ -153,6 +158,7 @@ const searchForum = asyncHandler(async (req, res) => {
     total_reply: row.total_reply,
     is_liked: row.is_liked,
     is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   res.status(200).json({
@@ -230,7 +236,8 @@ const getAllForum = asyncHandler(async (req, res) => {
       (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
       (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
       EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
-      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+      f.is_anonymous
     FROM reviews_forum f
     LEFT JOIN users u ON f.id_user = u.id_user
     LEFT JOIN subjects s ON f.id_subject = s.id_subject
@@ -261,7 +268,11 @@ const getAllForum = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
@@ -271,6 +282,7 @@ const getAllForum = asyncHandler(async (req, res) => {
     total_reply: row.total_reply,
     is_liked: row.is_liked,
     is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   return res.status(200).json({
@@ -313,7 +325,8 @@ const getForumById = asyncHandler(async (req, res) => {
         (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
         (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
         EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
-        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+        f.is_anonymous
       FROM reviews_forum f
       LEFT JOIN users u ON f.id_user = u.id_user
       WHERE f.id_forum = ${id_forum}::uuid
@@ -337,7 +350,8 @@ const getForumById = asyncHandler(async (req, res) => {
         total_bookmark: sql`(SELECT count(*)::int FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review})`.as('total_bookmark'),
         total_reply: sql`(SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = ${reviews.id_review})`.as('total_reply'),
         is_liked: sql`EXISTS (SELECT 1 FROM like_reviews l WHERE l.id_review = ${reviews.id_review} AND l.id_user = ${userId}::uuid)`.as('is_liked'),
-        is_bookmarked: sql`EXISTS (SELECT 1 FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review} AND b.id_user = ${userId}::uuid)`.as('is_bookmarked')
+        is_bookmarked: sql`EXISTS (SELECT 1 FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review} AND b.id_user = ${userId}::uuid)`.as('is_bookmarked'),
+        is_anonymous: reviews.is_anonymous,
       })
       .from(reviews)
       .leftJoin(users, eq(reviews.id_user, users.id_user))
@@ -369,6 +383,7 @@ const getForumById = asyncHandler(async (req, res) => {
     total_reply: forumRow.total_reply,
     is_liked: forumRow.is_liked,
     is_bookmarked: forumRow.is_bookmarked,
+    is_anonymous: forumRow.is_anonymous,
   };
 
   if (!forum) {
@@ -378,7 +393,19 @@ const getForumById = asyncHandler(async (req, res) => {
   // Gabungkan hasil
   const responseData = {
     ...forum,
-    reviews: reviewsResult,
+    user: forum.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+    } : forum.user,
+    reviews: reviewsResult.map(review => ({
+      ...review,
+      user: review.is_anonymous ? {
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      } : review.user
+    })),
   };
 
   return res.status(200).json({
@@ -413,7 +440,8 @@ const getForumBySubject = asyncHandler(async (req, res) => {
       (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
       (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
       EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
-      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+      f.is_anonymous
     FROM reviews_forum f
     LEFT JOIN users u ON f.id_user = u.id_user
     LEFT JOIN subjects s ON f.id_subject = s.id_subject
@@ -436,7 +464,11 @@ const getForumBySubject = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: {
+    user: row.is_anonymous ? {
+      id_user: null,
+      name: "Anonymous",
+      image: null,
+    } : {
       id_user: row.id_user,
       name: row.user_name,
       image: row.user_image,
@@ -446,6 +478,7 @@ const getForumBySubject = asyncHandler(async (req, res) => {
     total_reply: row.total_reply,
     is_liked: row.is_liked,
     is_bookmarked: row.is_bookmarked,
+    is_anonymous: row.is_anonymous,
   }));
 
   return res.status(200).json({
@@ -707,7 +740,8 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
         f.files,
         f.created_at,
         (f.vectorize <=> $1::vector) as distance,
-        (1 - (f.vectorize <=> $1::vector)) as similarity
+        (1 - (f.vectorize <=> $1::vector)) as similarity,
+        f.is_anonymous
       FROM reviews_forum f
       WHERE f.vectorize IS NOT NULL
       ORDER BY f.vectorize <=> $1::vector
@@ -734,7 +768,8 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
           f.title,
           f.description,
           f.files,
-          f.created_at
+          f.created_at,
+          f.is_anonymous
         FROM reviews_forum f
         WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern}
         LIMIT ${limit}

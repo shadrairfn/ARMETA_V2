@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, timestamp, text, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { vector, jsonb } from "drizzle-orm/pg-core";
 
@@ -84,6 +84,7 @@ export const reviews = pgTable("reviews", {
   title: varchar("title", { length: 128 }).notNull(),
   body: text("body"),
   vectorize: vector("vectorize", { dimensions: 1024 }),
+  is_anonymous: boolean("is_anonymous").default(false),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 });
@@ -146,6 +147,7 @@ export const reviewsForum = pgTable("reviews_forum", {
   title: text("title").notNull(),
   description: text("description"),
   files: jsonb("files").$type/** @type {string[]} */(),
+  is_anonymous: boolean("is_anonymous").default(false),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 })
