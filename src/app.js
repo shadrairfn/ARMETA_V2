@@ -26,10 +26,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  // "http://localhost:3001",
+]
+
 // CORS configuration
 app.use(
   cors({
-    origin: "http://localhost:3001",
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],

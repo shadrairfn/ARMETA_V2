@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 3000
 
 # Jalankan server dengan nodemon (dev mode)
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]
