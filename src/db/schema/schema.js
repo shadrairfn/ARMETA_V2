@@ -124,6 +124,7 @@ export const reports = pgTable("reports", {
   id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
   id_lecturer: uuid("id_lecturer").references(() => lecturers.id_lecturer, { onDelete: "cascade" }),
   id_review: uuid("id_review").references(() => reviews.id_review, { onDelete: "cascade" }),
+  id_forum: uuid("id_forum").references(() => reviewsForum.id_forum, { onDelete: "cascade" }),
   type: reportTypeEnum("report_type").notNull(),
   body: text("body"),
   status: reportStatusEnum("report_status").notNull().default("Pending"),
@@ -135,6 +136,7 @@ export const reportRelations = relations(reports, ({ one }) => ({
   users: one(users, { fields: [reports.id_user], references: [users.id_user] }),
   lecturers: one(lecturers, { fields: [reports.id_lecturer], references: [lecturers.id_lecturer] }),
   reviews: one(reviews, { fields: [reports.id_review], references: [reviews.id_review] }),
+  forums: one(reviewsForum, { fields: [reports.id_forum], references: [reviewsForum.id_forum] }),
 }));
 
 export const reviewsForum = pgTable("reviews_forum", {
