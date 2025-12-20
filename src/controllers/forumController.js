@@ -730,8 +730,9 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
   // Note: This requires reviews_forum table to have a vectorize column
   // If not available, we fall back to text search
   try {
+    const vectorString = `[${queryEmbedding.join(",")}]`;
     const similarForums = await db.execute(
-      `SELECT
+      sql`SELECT
         f.id_forum,
         f.id_user,
         f.id_subject,
@@ -739,19 +740,39 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
         f.description,
         f.files,
         f.created_at,
-        (f.vectorize <=> $1::vector) as distance,
-        (1 - (f.vectorize <=> $1::vector)) as similarity,
-        f.is_anonymous
+        f.is_anonymous,
+        (f.vectorize <=> ${vectorString}::vector) as distance,
+        (1 - (f.vectorize <=> ${vectorString}::vector)) as similarity,
+        s.name as subject_name,
+        u.name as user_name,
+        u.image as user_image,
+        (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+        (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+        (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply
       FROM reviews_forum f
+      LEFT JOIN users u ON f.id_user = u.id_user
+      LEFT JOIN subjects s ON f.id_subject = s.id_subject
       WHERE f.vectorize IS NOT NULL
-      ORDER BY f.vectorize <=> $1::vector
-      LIMIT $2`,
-      [JSON.stringify(queryEmbedding), limit]
+      ORDER BY f.vectorize <=> ${vectorString}::vector
+      LIMIT ${limit}`
     );
+
+    const results = similarForums.rows.map(row => ({
+      ...row,
+      user: row.is_anonymous ? {
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      } : {
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      }
+    }));
 
     return successResponse(res, 200, "Pencarian berhasil", {
       query,
-      results: similarForums.rows,
+      results,
       count: similarForums.rows.length,
     });
   } catch (error) {
@@ -769,16 +790,37 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
           f.description,
           f.files,
           f.created_at,
-          f.is_anonymous
+          f.is_anonymous,
+          s.name as subject_name,
+          u.name as user_name,
+          u.image as user_image,
+          (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
+          (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
+          (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply
         FROM reviews_forum f
+        LEFT JOIN users u ON f.id_user = u.id_user
+        LEFT JOIN subjects s ON f.id_subject = s.id_subject
         WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern}
         LIMIT ${limit}
       `
     );
 
+    const results = textSearchResults.rows.map(row => ({
+      ...row,
+      user: row.is_anonymous ? {
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      } : {
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      }
+    }));
+
     return successResponse(res, 200, "Pencarian berhasil (text search)", {
       query,
-      results: textSearchResults.rows,
+      results,
       count: textSearchResults.rows.length,
     });
   }

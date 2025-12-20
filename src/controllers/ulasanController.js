@@ -731,22 +731,34 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
 
   // Search for similar ulasan using cosine similarity
   // Using raw SQL for pgvector similarity search
+  const vectorString = `[${queryEmbedding.join(",")}]`;
+
   const similarUlasan = await db.execute(
-    `SELECT
+    sql`SELECT
       u.id_review,
       u.id_user,
       u.id_subject,
       u.id_lecturer,
       u.title,
+      u.body,
       u.files,
       u.created_at,
-      (u.vectorize <=> $1::vector) as distance,
-      (1 - (u.vectorize <=> $1::vector)) as similarity,
-      u.is_anonymous
+      u.is_anonymous,
+      (u.vectorize <=> ${vectorString}::vector) as distance,
+      (1 - (u.vectorize <=> ${vectorString}::vector)) as similarity,
+      s.name as subject_name,
+      l.name as lecturer_name,
+      usr.name as user_name,
+      usr.image as user_image,
+      (SELECT count(*)::int FROM like_reviews lr WHERE lr.id_review = u.id_review) as total_likes,
+      (SELECT count(*)::int FROM bookmark_reviews br WHERE br.id_review = u.id_review) as total_bookmarks,
+      (SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = u.id_review) as total_reply
     FROM reviews u
-    ORDER BY u.vectorize <=> $1::vector
-    LIMIT $2`,
-    [JSON.stringify(queryEmbedding), limit]
+    LEFT JOIN subjects s ON u.id_subject = s.id_subject
+    LEFT JOIN lecturers l ON u.id_lecturer = l.id_lecturer
+    LEFT JOIN users usr ON u.id_user = usr.id_user
+    ORDER BY u.vectorize <=> ${vectorString}::vector
+    LIMIT ${limit}`
   );
 
   return successResponse(res, 200, "Pencarian berhasil", {
@@ -759,8 +771,8 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
         image: null,
       } : {
         id_user: row.id_user,
-        name: "User", // Wait, searchSimilarUlasan seems to not join with users? 
-        // Let's check the query again.
+        name: row.user_name,
+        image: row.user_image,
       }
     })),
     count: similarUlasan.rows.length,
