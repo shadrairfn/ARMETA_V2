@@ -1,15 +1,53 @@
 import { db } from "../db/db.js";
 import { users, reviews, reviewsForum, reports, lecturers, subjects } from "../db/schema/schema.js";
-import { eq, sql, count } from "drizzle-orm";
+import { eq, sql, count, desc, gte, and, lte } from "drizzle-orm";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { NotFoundError } from "../utils/customError.js";
 
 // --- Stats ---
 const getAdminStats = asyncHandler(async (req, res) => {
+    // Basic Counts
     const [userCount] = await db.select({ value: count() }).from(users);
     const [reviewCount] = await db.select({ value: count() }).from(reviews);
     const [forumCount] = await db.select({ value: count() }).from(reviewsForum);
     const [reportCount] = await db.select({ value: count() }).from(reports).where(eq(reports.status, "Pending"));
+
+    // User status breakdown
+    const [bannedCount] = await db.select({ value: count() }).from(users).where(eq(users.is_banned, true));
+
+    // Content trends (last 7 days grouped by date)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const reviewTrends = await db.select({
+        date: sql`DATE(created_at)`,
+        count: count()
+    })
+        .from(reviews)
+        .where(gte(reviews.created_at, sevenDaysAgo))
+        .groupBy(sql`DATE(created_at)`)
+        .orderBy(sql`DATE(created_at) ASC`);
+
+    const forumTrends = await db.select({
+        date: sql`DATE(created_at)`,
+        count: count()
+    })
+        .from(reviewsForum)
+        .where(gte(reviewsForum.created_at, sevenDaysAgo))
+        .groupBy(sql`DATE(created_at)`)
+        .orderBy(sql`DATE(created_at) ASC`);
+
+    // Top lecturers (most reviewed)
+    const topLecturers = await db.select({
+        id: lecturers.id_lecturer,
+        name: lecturers.name,
+        review_count: count(reviews.id_review)
+    })
+        .from(lecturers)
+        .leftJoin(reviews, eq(lecturers.id_lecturer, reviews.id_lecturer))
+        .groupBy(lecturers.id_lecturer, lecturers.name)
+        .orderBy(desc(count(reviews.id_review)))
+        .limit(5);
 
     return res.status(200).json({
         status: true,
@@ -18,6 +56,13 @@ const getAdminStats = asyncHandler(async (req, res) => {
             totalReviews: reviewCount.value,
             totalForums: forumCount.value,
             pendingReports: reportCount.value,
+            bannedUsers: bannedCount.value,
+            activeUsers: Number(userCount.value) - Number(bannedCount.value),
+            trends: {
+                reviews: reviewTrends,
+                forums: forumTrends
+            },
+            topLecturers
         }
     });
 });
