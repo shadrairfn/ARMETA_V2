@@ -21,7 +21,7 @@ import {
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { generateEmbedding } from "../service/vectorizationService.js";
+import { generateEmbedding, generateQueryEmbedding } from "../service/vectorizationService.js";
 import { createClient } from '@supabase/supabase-js';
 
 import dotenv from 'dotenv';
@@ -771,16 +771,18 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
 
   // Generate query embedding
   console.log("🔍 Generating query embedding for forum search...");
-  const queryEmbedding = await generateEmbedding(query);
+  const queryEmbedding = await generateQueryEmbedding(query);
   console.log("✅ Query embedding generated");
 
   // Search for similar forums using cosine similarity
-  // Note: This requires reviews_forum table to have a vectorize column
-  // If not available, we fall back to text search
   try {
     const vectorString = `[${queryEmbedding.join(",")}]`;
+    // Use a CTE to pass the vector parameter once, avoiding issues with large parameters and some poolers
     const similarForums = await db.execute(
-      sql`SELECT
+      sql`WITH query_vector AS (
+        SELECT ${vectorString}::vector as q_vec
+      )
+      SELECT
         f.id_forum,
         f.id_user,
         f.id_subject,
@@ -789,8 +791,8 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
         f.files,
         f.created_at,
         f.is_anonymous,
-        (f.vectorize <=> ${vectorString}::vector) as distance,
-        (1 - (f.vectorize <=> ${vectorString}::vector)) as similarity,
+        (f.vectorize <=> qv.q_vec) as distance,
+        (1 - (f.vectorize <=> qv.q_vec)) as similarity,
         s.name as subject_name,
         u.name as user_name,
         u.image as user_image,
@@ -798,10 +800,11 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
         (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
         (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply
       FROM reviews_forum f
+      CROSS JOIN query_vector qv
       LEFT JOIN users u ON f.id_user = u.id_user
       LEFT JOIN subjects s ON f.id_subject = s.id_subject
       WHERE f.vectorize IS NOT NULL
-      ORDER BY f.vectorize <=> ${vectorString}::vector
+      ORDER BY f.vectorize <=> qv.q_vec
       LIMIT ${limit}`
     );
 

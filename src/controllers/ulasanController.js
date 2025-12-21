@@ -29,7 +29,7 @@ import {
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { generateEmbedding } from "../service/vectorizationService.js";
+import { generateEmbedding, generateQueryEmbedding } from "../service/vectorizationService.js";
 import { createClient } from '@supabase/supabase-js';
 
 import dotenv from 'dotenv';
@@ -916,57 +916,99 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
 
   // Generate query embedding
   console.log("🔍 Generating query embedding...");
-  const queryEmbedding = await generateEmbedding(query);
+  const queryEmbedding = await generateQueryEmbedding(query);
   console.log("✅ Query embedding generated");
 
   // Search for similar ulasan using cosine similarity
   // Using raw SQL for pgvector similarity search
-  const vectorString = `[${queryEmbedding.join(",")}]`;
+  try {
+    const vectorString = `[${queryEmbedding.join(",")}]`;
+    const similarUlasan = await db.execute(
+      sql`WITH query_vector AS (
+        SELECT ${vectorString}::vector as q_vec
+      )
+      SELECT
+        u.id_review,
+        u.id_user,
+        u.id_subject,
+        u.id_lecturer,
+        u.title,
+        u.body,
+        u.files,
+        u.created_at,
+        u.is_anonymous,
+        (u.vectorize <=> qv.q_vec) as distance,
+        (1 - (u.vectorize <=> qv.q_vec)) as similarity,
+        s.name as subject_name,
+        l.name as lecturer_name,
+        usr.name as user_name,
+        usr.image as user_image,
+        (SELECT count(*)::int FROM like_reviews lr WHERE lr.id_review = u.id_review) as total_likes,
+        (SELECT count(*)::int FROM bookmark_reviews br WHERE br.id_review = u.id_review) as total_bookmarks,
+        (SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = u.id_review) as total_reply
+      FROM reviews u
+      CROSS JOIN query_vector qv
+      LEFT JOIN subjects s ON u.id_subject = s.id_subject
+      LEFT JOIN lecturers l ON u.id_lecturer = l.id_lecturer
+      LEFT JOIN users usr ON u.id_user = usr.id_user
+      ORDER BY u.vectorize <=> qv.q_vec
+      LIMIT ${limit}`
+    );
 
-  const similarUlasan = await db.execute(
-    sql`SELECT
-      u.id_review,
-      u.id_user,
-      u.id_subject,
-      u.id_lecturer,
-      u.title,
-      u.body,
-      u.files,
-      u.created_at,
-      u.is_anonymous,
-      (u.vectorize <=> ${vectorString}::vector) as distance,
-      (1 - (u.vectorize <=> ${vectorString}::vector)) as similarity,
-      s.name as subject_name,
-      l.name as lecturer_name,
-      usr.name as user_name,
-      usr.image as user_image,
-      (SELECT count(*)::int FROM like_reviews lr WHERE lr.id_review = u.id_review) as total_likes,
-      (SELECT count(*)::int FROM bookmark_reviews br WHERE br.id_review = u.id_review) as total_bookmarks,
-      (SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = u.id_review) as total_reply
-    FROM reviews u
-    LEFT JOIN subjects s ON u.id_subject = s.id_subject
-    LEFT JOIN lecturers l ON u.id_lecturer = l.id_lecturer
-    LEFT JOIN users usr ON u.id_user = usr.id_user
-    ORDER BY u.vectorize <=> ${vectorString}::vector
-    LIMIT ${limit}`
-  );
+    return successResponse(res, 200, "Pencarian berhasil", {
+      query,
+      results: similarUlasan.rows.map(row => ({
+        ...row,
+        user: row.is_anonymous ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        } : {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        }
+      })),
+      count: similarUlasan.rows.length,
+    });
+  } catch (error) {
+    console.error("Vector search failed:", error);
+    // Fallback to text search
+    const searchPattern = `%${query}%`;
+    const dataUlasan = await db
+      .select({
+        id_review: reviews.id_review,
+        id_user: reviews.id_user,
+        title: reviews.title,
+        body: reviews.body,
+        files: reviews.files,
+        created_at: reviews.created_at,
+        user_name: users.name,
+        user_image: users.image,
+      })
+      .from(reviews)
+      .leftJoin(users, eq(reviews.id_user, users.id_user))
+      .where(
+        and(
+          isNull(reviews.id_reply),
+          sql`(${reviews.title} ILIKE ${searchPattern} OR ${reviews.body} ILIKE ${searchPattern})`
+        )
+      )
+      .limit(limit);
 
-  return successResponse(res, 200, "Pencarian berhasil", {
-    query,
-    results: similarUlasan.rows.map(row => ({
-      ...row,
-      user: row.is_anonymous ? {
-        id_user: null,
-        name: "Anonymous",
-        image: null,
-      } : {
-        id_user: row.id_user,
-        name: row.user_name,
-        image: row.user_image,
-      }
-    })),
-    count: similarUlasan.rows.length,
-  });
+    return successResponse(res, 200, "Pencarian berhasil (fallback)", {
+      query,
+      results: dataUlasan.map(row => ({
+        ...row,
+        user: {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        }
+      })),
+      count: dataUlasan.length,
+    });
+  }
 });
 
 const searchUlasan = asyncHandler(async (req, res) => {

@@ -147,6 +147,7 @@ export const reviewsForum = pgTable("reviews_forum", {
   title: text("title").notNull(),
   description: text("description"),
   files: jsonb("files").$type/** @type {string[]} */(),
+  vectorize: vector("vectorize", { dimensions: 1024 }),
   is_anonymous: boolean("is_anonymous").default(false),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
