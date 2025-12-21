@@ -285,7 +285,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
   const offset = (page - 1) * limit;
 
   // Filter & Sort Params
-  const { from, to, sortBy = "date", order = "desc", id_user } = req.query;
+  const { from, to, sortBy = "date", order = "desc", id_user, id_lecturer, id_subject } = req.query;
 
   // 1. Base WHERE conditions (Filter out replies and forum content by default)
   const whereConditions = [];
@@ -312,6 +312,16 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     } else {
       whereConditions.push(and(eq(reviews.id_user, id_user), eq(reviews.is_anonymous, false)));
     }
+  }
+
+  // 4. Add Lecturer filtering if provided
+  if (id_lecturer) {
+    whereConditions.push(eq(reviews.id_lecturer, id_lecturer));
+  }
+
+  // 5. Add Subject filtering if provided
+  if (id_subject) {
+    whereConditions.push(eq(reviews.id_subject, id_subject));
   }
 
   // 3. Prepare Sort Logic

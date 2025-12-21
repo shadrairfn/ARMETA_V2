@@ -183,7 +183,7 @@ const getAllForum = asyncHandler(async (req, res) => {
   const offset = (page - 1) * limit;
 
   // Filter & Sort Params
-  const { from, to, sortBy = "date", order = "desc", id_user } = req.query;
+  const { from, to, sortBy = "date", order = "desc", id_user, id_subject } = req.query;
 
   // Build WHERE clause
   let whereClause = sql`1=1`;
@@ -204,6 +204,11 @@ const getAllForum = asyncHandler(async (req, res) => {
     } else {
       whereClause = sql`${whereClause} AND f.id_user = ${id_user}::uuid AND f.is_anonymous = false`;
     }
+  }
+
+  // Add Subject Filtering if provided
+  if (id_subject) {
+    whereClause = sql`${whereClause} AND f.id_subject = ${id_subject}::uuid`;
   }
 
   // Prepare Sort Logic
