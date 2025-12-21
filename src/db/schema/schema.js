@@ -31,6 +31,8 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 128 }).notNull().unique(),
   image: varchar("image", { length: 255 }),
   poin: integer("poin").default(0),
+  role: varchar("role", { length: 20 }).default("user").notNull(),
+  is_banned: boolean("is_banned").default(false).notNull(),
   refreshToken: text("refresh_token"),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
   updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),

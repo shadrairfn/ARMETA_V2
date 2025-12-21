@@ -87,6 +87,8 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
     id_user: user.id_user,
     email: user.email,
     name: user.name,
+    role: user.role,
+    is_banned: user.is_banned,
   });
 
   return res.status(200).json({
@@ -113,6 +115,8 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
       name: users.name,
       image: users.image,
       poin: users.poin,
+      role: users.role,
+      is_banned: users.is_banned,
       created_at: users.created_at,
       updated_at: users.updated_at
     })

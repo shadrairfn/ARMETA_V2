@@ -21,7 +21,21 @@ export const requireAuth = (req, res, next) => {
     console.log(decoded);
     console.log(" ================= decoded ================");
 
-    req.user = decoded; // { id_user, email, nama }
+    req.user = decoded; // { id_user, email, nama, role, is_banned }
+
+    if (decoded.is_banned) {
+      return res.status(403).json({ message: "Akun Anda telah ditangguhkan (banned)" });
+    }
+
+    next();
+  });
+};
+
+export const requireAdmin = (req, res, next) => {
+  requireAuth(req, res, () => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Akses ditolak. Memerlukan hak akses Admin." });
+    }
     next();
   });
 };

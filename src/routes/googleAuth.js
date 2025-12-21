@@ -50,6 +50,8 @@ router.get(
         id_user: req.user.id_user,
         email: req.user.email,
         name: req.user.name,
+        role: req.user.role,
+        is_banned: req.user.is_banned,
       });
 
       const refreshToken = generateRefreshToken({
