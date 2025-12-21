@@ -284,8 +284,13 @@ const getAllUlasan = asyncHandler(async (req, res) => {
 
   // 2. Add Date Filtering if provided
   if (from && to) {
-    whereConditions.push(gte(reviews.created_at, new Date(from)));
-    whereConditions.push(lte(reviews.created_at, new Date(to)));
+    const fromDate = new Date(from);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+
+    whereConditions.push(gte(reviews.created_at, fromDate));
+    whereConditions.push(lte(reviews.created_at, toDate));
   }
 
   // 3. Add User Filtering if provided

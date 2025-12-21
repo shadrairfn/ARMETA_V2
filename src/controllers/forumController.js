@@ -182,7 +182,11 @@ const getAllForum = asyncHandler(async (req, res) => {
 
   // Add Date Filtering if provided
   if (from && to) {
-    whereClause = sql`${whereClause} AND f.created_at >= ${new Date(from)} AND f.created_at <= ${new Date(to)}`;
+    const fromDate = new Date(from);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+    whereClause = sql`${whereClause} AND f.created_at >= ${fromDate} AND f.created_at <= ${toDate}`;
   }
 
   // Add User Filtering if provided
