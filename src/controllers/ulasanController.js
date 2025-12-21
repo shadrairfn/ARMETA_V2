@@ -7,6 +7,7 @@ import {
   bookmarkReviews,
   subjects,
   lecturers,
+  reviewsForum,
 } from "../db/schema/schema.js";
 import { eq, sql, and, count, desc, gte, lte, asc, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -279,8 +280,12 @@ const getAllUlasan = asyncHandler(async (req, res) => {
   // Filter & Sort Params
   const { from, to, sortBy = "date", order = "desc", id_user } = req.query;
 
-  // 1. Base WHERE conditions (Always filter out replies and forum content)
-  const whereConditions = [isNull(reviews.id_reply), isNull(reviews.id_forum)];
+  // 1. Base WHERE conditions (Filter out replies and forum content by default)
+  const whereConditions = [];
+  if (!id_user) {
+    whereConditions.push(isNull(reviews.id_reply));
+    whereConditions.push(isNull(reviews.id_forum));
+  }
 
   // 2. Add Date Filtering if provided
   if (from && to) {
@@ -336,6 +341,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       id_review: reviews.id_review,
       id_user: reviews.id_user,
       id_forum: reviews.id_forum,
+      id_reply: reviews.id_reply,
       title: reviews.title,
       body: reviews.body,
       files: reviews.files,
@@ -356,6 +362,17 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
       is_anonymous: reviews.is_anonymous,
+      parent_user_name: sql`(
+        CASE 
+          WHEN ${reviews.id_reply} IS NOT NULL THEN (
+            SELECT u.name FROM reviews r JOIN users u ON r.id_user = u.id_user WHERE r.id_review = ${reviews.id_reply}
+          )
+          WHEN ${reviews.id_forum} IS NOT NULL THEN (
+            SELECT u.name FROM reviews_forum f JOIN users u ON f.id_user = u.id_user WHERE f.id_forum = ${reviews.id_forum}
+          )
+          ELSE NULL
+        END
+      )`.as('parent_user_name'),
     })
     .from(reviews)
     .leftJoin(lecturers, eq(reviews.id_lecturer, lecturers.id_lecturer))
@@ -397,6 +414,9 @@ const getAllUlasan = asyncHandler(async (req, res) => {
   const mappedData = dataUlasan.map((row) => ({
     id_review: row.id_review,
     id_user: row.id_user,
+    id_forum: row.id_forum,
+    id_reply: row.id_reply,
+    parent_user_name: row.parent_user_name,
     title: row.title,
     body: row.body,
     files: row.files,
@@ -470,6 +490,8 @@ const getUlasanById = asyncHandler(async (req, res) => {
         total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
         is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
         is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+        id_reply: reviews.id_reply,
+        id_forum: reviews.id_forum,
         is_anonymous: reviews.is_anonymous,
       })
       .from(reviews)
@@ -515,6 +537,68 @@ const getUlasanById = asyncHandler(async (req, res) => {
     throw new NotFoundError("Ulasan tidak ditemukan");
   }
 
+  // --- 3. QUERY PARENT CONTEXT (Review asal / Forum asal) ---
+  let parentSource = null;
+  if (ulasan.id_reply) {
+    const [parentReview] = await db
+      .select({
+        id: reviews.id_review,
+        title: reviews.title,
+        body: reviews.body,
+        created_at: reviews.created_at,
+        user: {
+          id_user: users.id_user,
+          name: users.name,
+          image: users.image,
+        },
+        is_anonymous: reviews.is_anonymous,
+      })
+      .from(reviews)
+      .leftJoin(users, eq(reviews.id_user, users.id_user))
+      .where(eq(reviews.id_review, ulasan.id_reply));
+
+    if (parentReview) {
+      parentSource = {
+        type: 'review',
+        ...parentReview,
+        user: parentReview.is_anonymous ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        } : parentReview.user
+      };
+    }
+  } else if (ulasan.id_forum) {
+    const [parentForum] = await db
+      .select({
+        id: reviewsForum.id_forum,
+        title: reviewsForum.title,
+        body: reviewsForum.description,
+        created_at: reviewsForum.created_at,
+        user: {
+          id_user: users.id_user,
+          name: users.name,
+          image: users.image,
+        },
+        is_anonymous: reviewsForum.is_anonymous,
+      })
+      .from(reviewsForum)
+      .leftJoin(users, eq(reviewsForum.id_user, users.id_user))
+      .where(eq(reviewsForum.id_forum, ulasan.id_forum));
+
+    if (parentForum) {
+      parentSource = {
+        type: 'forum',
+        ...parentForum,
+        user: parentForum.is_anonymous ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        } : parentForum.user
+      };
+    }
+  }
+
   // Gabungkan hasil
   const responseData = {
     ...ulasan,
@@ -532,6 +616,7 @@ const getUlasanById = asyncHandler(async (req, res) => {
         image: null,
       } : reply.user
     })),
+    parent_source: parentSource,
   };
 
   return res.status(200).json({
