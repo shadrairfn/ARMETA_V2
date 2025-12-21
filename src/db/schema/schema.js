@@ -21,7 +21,8 @@ export const reportStatusEnum = pgEnum("report_status", [
   'Investigating',
   'Action',
   'Resolved',
-  'Rejected'
+  'Rejected',
+  'Ignored'
 ]);
 
 
@@ -34,7 +35,7 @@ export const users = pgTable("users", {
   role: varchar("role", { length: 20 }).default("user").notNull(),
   is_banned: boolean("is_banned").default(false).notNull(),
   refreshToken: text("refresh_token"),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
 });
 
@@ -53,7 +54,7 @@ export const lecturers = pgTable("lecturers", {
   npm: varchar("npm", { length: 50 }),
   email: varchar("email", { length: 128 }),
   faculty: facultyEnum("faculty").notNull(),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
 });
 
@@ -87,7 +88,7 @@ export const reviews = pgTable("reviews", {
   body: text("body"),
   vectorize: vector("vectorize", { dimensions: 1024 }),
   is_anonymous: boolean("is_anonymous").default(false),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 });
 
@@ -131,7 +132,7 @@ export const reports = pgTable("reports", {
   type: reportTypeEnum("report_type").notNull(),
   body: text("body"),
   status: reportStatusEnum("report_status").notNull().default("Pending"),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
 });
 
@@ -151,7 +152,7 @@ export const reviewsForum = pgTable("reviews_forum", {
   files: jsonb("files").$type/** @type {string[]} */(),
   vectorize: vector("vectorize", { dimensions: 1024 }),
   is_anonymous: boolean("is_anonymous").default(false),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(null).$onUpdate(() => new Date()),
 })
 
@@ -190,5 +191,5 @@ export const chatbotHistory = pgTable("chatbot_history", {
   id_user: uuid("id_user").references(() => users.id_user, { onDelete: "cascade" }).notNull(),
   question: text("question").notNull(),
   answer: text("answer").notNull(),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
