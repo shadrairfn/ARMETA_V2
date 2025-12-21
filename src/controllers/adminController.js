@@ -82,6 +82,51 @@ const updateUserRole = asyncHandler(async (req, res) => {
     });
 });
 
+// --- Reports ---
+const getAllReports = asyncHandler(async (req, res) => {
+    const allReports = await db.select({
+        id_report: reports.id_report,
+        reason: reports.type,
+        description: reports.body,
+        status: reports.status,
+        id_review: reports.id_review,
+        id_forum: reports.id_forum,
+        id_lecturer: reports.id_lecturer,
+        created_at: reports.created_at,
+        reporter: {
+            name: users.name,
+            email: users.email
+        }
+    })
+        .from(reports)
+        .leftJoin(users, eq(reports.id_user, users.id_user))
+        .orderBy(sql`${reports.created_at} DESC`);
+
+    return res.status(200).json({
+        status: true,
+        data: allReports,
+    });
+});
+
+const resolveReport = asyncHandler(async (req, res) => {
+    const { id_report } = req.params;
+    const { status } = req.body; // "Resolved", "Ignored"
+
+    const [updatedReport] = await db
+        .update(reports)
+        .set({ status })
+        .where(eq(reports.id_report, id_report))
+        .returning();
+
+    if (!updatedReport) throw new NotFoundError("Report not found");
+
+    return res.status(200).json({
+        status: true,
+        message: `Report marked as ${status}`,
+        data: updatedReport
+    });
+});
+
 // --- Content Moderation ---
 const deleteContent = asyncHandler(async (req, res) => {
     const { type, id } = req.params;
@@ -108,5 +153,7 @@ export {
     getAllUsers,
     toggleUserBan,
     updateUserRole,
-    deleteContent
+    deleteContent,
+    getAllReports,
+    resolveReport
 };

@@ -4,7 +4,9 @@ import {
     getAllUsers,
     toggleUserBan,
     updateUserRole,
-    deleteContent
+    deleteContent,
+    getAllReports,
+    resolveReport
 } from "../controllers/adminController.js";
 import { requireAdmin } from "../middleware/authMiddleware.js";
 
@@ -18,5 +20,7 @@ router.get("/users", getAllUsers);
 router.patch("/users/:id_user/ban", toggleUserBan);
 router.patch("/users/:id_user/role", updateUserRole);
 router.delete("/content/:type/:id", deleteContent);
+router.get("/reports", getAllReports);
+router.patch("/reports/:id_report/resolve", resolveReport);
 
 export default router;
