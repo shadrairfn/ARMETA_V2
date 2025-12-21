@@ -44,6 +44,14 @@ const createForum = asyncHandler(async (req, res) => {
     throw new BadRequestError("title dan id_subject wajib diisi");
   }
 
+  if (title.length > 100) {
+    throw new BadRequestError("Judul forum maksimal 100 karakter");
+  }
+
+  if (description && description.length > 1000) {
+    throw new BadRequestError("Isi forum maksimal 1000 karakter");
+  }
+
   // 2. Upload ke Supabase (Hanya jika ada file)
   const fileUploaded = req.files || []; // Pastikan ini array (dari multer)
   const fileLocalLinks = [];

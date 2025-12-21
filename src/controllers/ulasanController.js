@@ -57,6 +57,14 @@ const createUlasan = asyncHandler(async (req, res) => {
     );
   }
 
+  if (judulUlasan && judulUlasan.length > 100) {
+    throw new BadRequestError("Judul ulasan maksimal 100 karakter");
+  }
+
+  if (textUlasan && textUlasan.length > 1000) {
+    throw new BadRequestError("Isi ulasan maksimal 1000 karakter");
+  }
+
   // --- BAGIAN UPLOAD SUPABASE (MENGGANTIKAN FIREBASE) ---
   const fileUploaded = req.files || []; // Pastikan ini array (dari multer)
   const fileLocalLinks = [];
@@ -221,7 +229,9 @@ const editUlasan = asyncHandler(async (req, res) => {
   console.log("VECTORIZE DATA TYPE ONE:", typeof vectorString);
 
   if (body) {
-    console.log("🔄 Generating embedding for ulasan text...");
+    if (body.length > 1000) {
+      throw new BadRequestError("Isi ulasan maksimal 1000 karakter");
+    }
     const embeddingVector = await generateEmbedding(body);
 
     if (!Array.isArray(embeddingVector)) {
@@ -238,6 +248,8 @@ const editUlasan = asyncHandler(async (req, res) => {
   }
   if (!title || title === "") {
     title = oldReview.title;
+  } else if (title.length > 100) {
+    throw new BadRequestError("Judul ulasan maksimal 100 karakter");
   }
 
   if (!body || body === "") {
