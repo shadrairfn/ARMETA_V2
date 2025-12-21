@@ -10,6 +10,7 @@ import {
     getLikeUlasan,
     searchSimilarUlasan,
     searchUlasan,
+    deleteUlasan,
     getUlasanById
 } from "../controllers/ulasanController.js";
 import express from "express";
@@ -90,5 +91,11 @@ router.get(
     "/searchUlasan",
     requireAuth,
     searchUlasan)
+
+router.delete(
+    "/deleteUlasan",
+    requireAuth,
+    deleteUlasan
+);
 
 export default router;

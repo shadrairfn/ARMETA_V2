@@ -885,8 +885,111 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
   }
 });
 
+const editForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_forum, title, description, isAnonymous } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+
+  const [oldForum] = await db
+    .select()
+    .from(reviewsForum)
+    .where(eq(reviewsForum.id_forum, id_forum));
+
+  if (!oldForum) {
+    throw new NotFoundError("Forum tidak ditemukan");
+  }
+
+  // Ownership check
+  if (oldForum.id_user !== userId) {
+    throw new UnauthorizedError("Anda tidak memiliki izin untuk mengubah forum ini");
+  }
+
+  // Upload file bila ada
+  const fileUploaded = req.files || [];
+  const fileLocalLinks = [];
+  const BUCKET_NAME = "armeta-files";
+
+  if (fileUploaded.length > 0) {
+    for (const file of fileUploaded) {
+      const fileName = `ulasan/${Date.now()}-${file.originalname.replace(/\s/g, "_")}`;
+      const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase Upload Error:", error);
+        throw new Error(`Gagal upload file: ${error.message}`);
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(fileName);
+
+      fileLocalLinks.push(publicUrlData.publicUrl);
+    }
+  }
+
+  const updateData = {};
+  if (title !== undefined) updateData.title = title;
+  if (description !== undefined) updateData.description = description;
+  if (fileLocalLinks.length > 0) updateData.files = JSON.stringify(fileLocalLinks);
+  if (isAnonymous !== undefined) updateData.is_anonymous = isAnonymous === 'true' || isAnonymous === true;
+
+  updateData.updated_at = sql`NOW()`;
+
+  const [updatedForum] = await db
+    .update(reviewsForum)
+    .set(updateData)
+    .where(eq(reviewsForum.id_forum, id_forum))
+    .returning();
+
+  return res.status(200).json({
+    data: updatedForum,
+    success: true,
+    message: "Success update forum",
+  });
+});
+
+const deleteForum = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_forum } = req.body;
+
+  if (!id_forum) {
+    throw new BadRequestError("id_forum wajib diisi");
+  }
+
+  const [forum] = await db
+    .select()
+    .from(reviewsForum)
+    .where(eq(reviewsForum.id_forum, id_forum));
+
+  if (!forum) {
+    throw new NotFoundError("Forum tidak ditemukan");
+  }
+
+  // Ownership check
+  if (forum.id_user !== userId) {
+    throw new UnauthorizedError("Anda tidak memiliki izin untuk menghapus forum ini");
+  }
+
+  await db.delete(reviewsForum).where(eq(reviewsForum.id_forum, id_forum));
+
+  return res.status(200).json({
+    success: true,
+    message: "Success delete forum",
+  });
+});
+
 export {
   createForum,
+  editForum,
+  deleteForum,
   getForumBySubject,
   searchForum,
   getAllForum,

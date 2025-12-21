@@ -1,6 +1,8 @@
 import express from "express";
 import {
   createForum,
+  deleteForum,
+  editForum,
   getForumBySubject,
   searchForum,
   getAllForum,
@@ -19,6 +21,8 @@ import upload from "../middleware/uploadMiddleware.js";
 const router = express.Router();
 
 router.post("/createForum", requireAuth, upload.array("files"), createForum);
+router.patch("/editForum", requireAuth, upload.array("files"), editForum);
+router.delete("/deleteForum", requireAuth, deleteForum);
 router.get("/searchForum", requireAuth, searchForum);
 router.get("/getAllForum", requireAuth, getAllForum);
 router.get("/getForumId", requireAuth, getForumById);

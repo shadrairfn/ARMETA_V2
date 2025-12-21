@@ -165,110 +165,75 @@ const createUlasan = asyncHandler(async (req, res) => {
 });
 
 const editUlasan = asyncHandler(async (req, res) => {
-  // To be implemented
   const userId = req.user.id_user;
-  let { id_review, title, body } = req.body;
+  const { id_review, title, body, isAnonymous } = req.body;
+
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
+  }
 
   const [oldReview] = await db
     .select()
     .from(reviews)
-    .where(and(eq(reviews.id_user, userId), eq(reviews.id_review, id_review)));
+    .where(eq(reviews.id_review, id_review));
 
-  if (id_review != oldReview.id_review) {
-    throw new BadRequestError("id_review tidak sama");
+  if (!oldReview) {
+    throw new NotFoundError("Review tidak ditemukan");
   }
 
-  console.log(`BODY BEFORE: ${body}`);
-
-  if (!oldReview) throw new NotFoundError("Review tidak ditemukan");
+  // Ownership check
+  if (oldReview.id_user !== userId) {
+    throw new UnauthorizedError("Anda tidak memiliki izin untuk mengubah ulasan ini");
+  }
 
   // Upload file bila ada
-  let profileUrl = oldReview.files;
-  console.log("Profil URL: ", profileUrl);
-  console.log("Profil URL tipe: ", typeof profileUrl);
-  console.log("File lama: ", oldReview.files);
-  console.log("File lama tipe: ", typeof oldReview.files);
-  console.log("File sekarang: ", req.files);
-
-  const fileUploaded = req.files || []; // Pastikan ini array (dari multer)
+  const fileUploaded = req.files || [];
   const fileLocalLinks = [];
-
-  // Nama bucket Anda di Supabase (sesuaikan dengan yang dibuat di dashboard)
   const BUCKET_NAME = "armeta-files";
 
-  for (const file of fileUploaded) {
-    // 1. Buat nama file unik (misal: ulasan/timestamp-namafile)
-    // .replace spasi dengan underscore agar URL aman
-    const fileName = `ulasan/${Date.now()}-${file.originalname.replace(
-      /\s/g,
-      "_"
-    )}`;
+  if (fileUploaded.length > 0) {
+    for (const file of fileUploaded) {
+      const fileName = `ulasan/${Date.now()}-${file.originalname.replace(/\s/g, "_")}`;
+      const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
 
-    // 2. Upload file buffer ke Supabase
-    const { data, error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
+      if (error) {
+        console.error("Supabase Upload Error:", error);
+        throw new Error(`Gagal upload file: ${error.message}`);
+      }
 
-    if (error) {
-      console.error("Supabase Upload Error:", error);
-      throw new Error(`Gagal upload file: ${error.message}`);
+      const { data: publicUrlData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(fileName);
+
+      fileLocalLinks.push(publicUrlData.publicUrl);
     }
-
-    // 3. Dapatkan Public URL setelah berhasil upload
-    const { data: publicUrlData } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(fileName);
-
-    fileLocalLinks.push(publicUrlData.publicUrl);
   }
 
   let vectorString = oldReview.vectorize;
-  console.log("VECTORIZE DATA TYPE ONE:", typeof vectorString);
-
-  if (body) {
+  if (body && body !== oldReview.body) {
     if (body.length > 1000) {
       throw new BadRequestError("Isi ulasan maksimal 1000 karakter");
     }
     const embeddingVector = await generateEmbedding(body);
-
     if (!Array.isArray(embeddingVector)) {
       throw new Error("generateEmbedding did not return an array.");
     }
-
-    console.log(
-      "✅ Embedding generated successfully, dimension:",
-      embeddingVector.length
-    );
-
     vectorString = embeddingVector;
-    console.log("VECTORIZE DATA TYPE TWO:", typeof vectorString);
   }
-  if (!title || title === "") {
-    title = oldReview.title;
-  } else if (title.length > 100) {
-    throw new BadRequestError("Judul ulasan maksimal 100 karakter");
-  }
-
-  if (!body || body === "") {
-    body = oldReview.body;
-  }
-
-  console.log(`BODY AFTER: ${body}`);
 
   const updateData = {};
-
-  if (title) updateData.title = title;
-  if (body) updateData.body = body;
-  if (profileUrl) updateData.files = fileLocalLinks;
+  if (title !== undefined) updateData.title = title;
+  if (body !== undefined) updateData.body = body;
+  if (fileLocalLinks.length > 0) updateData.files = fileLocalLinks;
   if (vectorString) updateData.vectorize = vectorString;
+  if (isAnonymous !== undefined) updateData.is_anonymous = isAnonymous === 'true' || isAnonymous === true;
 
   updateData.updated_at = sql`NOW()`;
-
-  console.log("UPDATE DATA TYPE:", typeof updateData.vectorize);
-  console.log("UPDATE DATA:", updateData);
 
   const [updatedUlasan] = await db
     .update(reviews)
@@ -280,6 +245,36 @@ const editUlasan = asyncHandler(async (req, res) => {
     data: updatedUlasan,
     status: true,
     message: "Success update ulasan",
+  });
+});
+
+const deleteUlasan = asyncHandler(async (req, res) => {
+  const userId = req.user.id_user;
+  const { id_review } = req.body;
+
+  if (!id_review) {
+    throw new BadRequestError("id_review wajib diisi");
+  }
+
+  const [review] = await db
+    .select()
+    .from(reviews)
+    .where(eq(reviews.id_review, id_review));
+
+  if (!review) {
+    throw new NotFoundError("Ulasan tidak ditemukan");
+  }
+
+  // Ownership check
+  if (review.id_user !== userId) {
+    throw new UnauthorizedError("Anda tidak memiliki izin untuk menghapus ulasan ini");
+  }
+
+  await db.delete(reviews).where(eq(reviews.id_review, id_review));
+
+  return res.status(200).json({
+    status: true,
+    message: "Success delete ulasan",
   });
 });
 
@@ -1141,4 +1136,5 @@ export {
   getLikeUlasan,
   searchSimilarUlasan,
   searchUlasan,
+  deleteUlasan,
 };
