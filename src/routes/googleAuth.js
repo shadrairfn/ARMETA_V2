@@ -72,7 +72,7 @@ router.get(
       const callbackUrl =
         `?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
 
-      console.log("\n🔁 REDIRECTING TO:", callbackUrl);
+      console.log("\n🔁 REDIRECTING TO:", process.env.FRONTEND_URL, callbackUrl);
       return res.redirect(`${process.env.FRONTEND_URL}/auth/google/callback${callbackUrl}`);
     } catch (err) {
       console.log("\n❌ CALLBACK ERROR:", err);

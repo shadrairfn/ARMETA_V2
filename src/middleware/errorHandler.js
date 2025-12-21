@@ -50,6 +50,12 @@ export const errorHandler = (err, req, res, next) => {
     message = 'Missing required field';
   }
 
+  if (err.code === '22P02') {
+    // Invalid UUID format or similar data type conversion errors
+    statusCode = 404;
+    message = 'Resource not found or invalid ID format';
+  }
+
   // Validation Errors
   if (err.name === 'ValidationError') {
     statusCode = 422;
