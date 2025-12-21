@@ -1000,10 +1000,12 @@ const searchSimilarUlasan = asyncHandler(async (req, res) => {
       })
       .from(reviews)
       .leftJoin(users, eq(reviews.id_user, users.id_user))
+      .leftJoin(lecturers, eq(reviews.id_lecturer, lecturers.id_lecturer))
+      .leftJoin(subjects, eq(reviews.id_subject, subjects.id_subject))
       .where(
         and(
           isNull(reviews.id_reply),
-          sql`(${reviews.title} ILIKE ${searchPattern} OR ${reviews.body} ILIKE ${searchPattern})`
+          sql`(${reviews.title} ILIKE ${searchPattern} OR ${reviews.body} ILIKE ${searchPattern} OR ${lecturers.name} ILIKE ${searchPattern} OR ${subjects.name} ILIKE ${searchPattern})`
         )
       )
       .limit(limit);
@@ -1072,7 +1074,7 @@ const searchUlasan = asyncHandler(async (req, res) => {
     .where(
       and(
         isNull(reviews.id_reply), // Only top-level reviews
-        sql`(${reviews.title} ILIKE ${searchPattern} OR ${reviews.body} ILIKE ${searchPattern})`
+        sql`(${reviews.title} ILIKE ${searchPattern} OR ${reviews.body} ILIKE ${searchPattern} OR ${lecturers.name} ILIKE ${searchPattern} OR ${subjects.name} ILIKE ${searchPattern})`
       )
     )
     .groupBy(

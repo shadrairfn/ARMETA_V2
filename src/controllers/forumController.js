@@ -137,7 +137,7 @@ const searchForum = asyncHandler(async (req, res) => {
     FROM reviews_forum f
     LEFT JOIN users u ON f.id_user = u.id_user
     LEFT JOIN subjects s ON f.id_subject = s.id_subject
-    WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern}
+    WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern} OR s.name ILIKE ${searchPattern}
     ORDER BY f.created_at DESC
     LIMIT 20
   `);
@@ -859,7 +859,7 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
         FROM reviews_forum f
         LEFT JOIN users u ON f.id_user = u.id_user
         LEFT JOIN subjects s ON f.id_subject = s.id_subject
-        WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern}
+        WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern} OR s.name ILIKE ${searchPattern}
         LIMIT ${limit}
       `
     );
