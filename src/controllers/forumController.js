@@ -622,9 +622,10 @@ const unbookmarkForum = asyncHandler(async (req, res) => {
 });
 
 const getLikeForum = asyncHandler(async (req, res) => {
-  const userId = req.query.id_user || req.user.id_user;
+  const currentUserId = req.user.id_user;
+  const targetUserId = req.query.id_user || currentUserId;
 
-  if (!userId) {
+  if (!targetUserId) {
     throw new BadRequestError("id_user wajib diisi");
   }
 
@@ -645,14 +646,14 @@ const getLikeForum = asyncHandler(async (req, res) => {
         (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
         (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
         (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
-        EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
-        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
+        EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${currentUserId}::uuid) as is_liked,
+        EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${currentUserId}::uuid) as is_bookmarked,
         f.is_anonymous
       FROM like_forums lf
       JOIN reviews_forum f ON lf.id_forum = f.id_forum
       LEFT JOIN users u ON f.id_user = u.id_user
       LEFT JOIN subjects s ON f.id_subject = s.id_subject
-      WHERE lf.id_user = ${userId}
+      WHERE lf.id_user = ${targetUserId} 
       ORDER BY f.created_at DESC
     `
   );

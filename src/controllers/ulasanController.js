@@ -751,9 +751,10 @@ const unBookmarkUlasan = asyncHandler(async (req, res) => {
 });
 
 const getLikeUlasan = asyncHandler(async (req, res) => {
-  const userId = req.query.id_user || req.user.id_user;
+  const currentUserId = req.user.id_user;
+  const targetUserId = req.query.id_user || currentUserId;
 
-  if (!userId) {
+  if (!targetUserId) {
     throw new BadRequestError("id_user wajib diisi");
   }
 
@@ -782,8 +783,8 @@ const getLikeUlasan = asyncHandler(async (req, res) => {
       total_likes: sql`count(distinct ${allLikes.id_like})`.mapWith(Number),
       total_bookmarks: sql`count(distinct ${allBookmarks.id_bookmark})`.mapWith(Number),
       total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
-      is_liked: sql`count(case when ${allLikes.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
-      is_bookmarked: sql`count(case when ${allBookmarks.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
+      is_liked: sql`count(case when ${allLikes.id_user} = ${currentUserId} then 1 end) > 0`.mapWith(Boolean),
+      is_bookmarked: sql`count(case when ${allBookmarks.id_user} = ${currentUserId} then 1 end) > 0`.mapWith(Boolean),
       is_anonymous: reviews.is_anonymous,
     })
     .from(likeReviews)
@@ -793,7 +794,7 @@ const getLikeUlasan = asyncHandler(async (req, res) => {
     .leftJoin(users, eq(reviews.id_user, users.id_user))
     .leftJoin(allLikes, eq(reviews.id_review, allLikes.id_review))
     .leftJoin(allBookmarks, eq(reviews.id_review, allBookmarks.id_review))
-    .where(eq(likeReviews.id_user, userId))
+    .where(eq(likeReviews.id_user, targetUserId))
     .groupBy(
       reviews.id_review,
       lecturers.name,
