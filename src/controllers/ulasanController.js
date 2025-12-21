@@ -300,7 +300,11 @@ const getAllUlasan = asyncHandler(async (req, res) => {
 
   // 3. Add User Filtering if provided
   if (id_user) {
-    whereConditions.push(eq(reviews.id_user, id_user));
+    if (id_user === userId) {
+      whereConditions.push(eq(reviews.id_user, id_user));
+    } else {
+      whereConditions.push(and(eq(reviews.id_user, id_user), eq(reviews.is_anonymous, false)));
+    }
   }
 
   // 3. Prepare Sort Logic

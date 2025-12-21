@@ -191,7 +191,11 @@ const getAllForum = asyncHandler(async (req, res) => {
 
   // Add User Filtering if provided
   if (id_user) {
-    whereClause = sql`${whereClause} AND f.id_user = ${id_user}::uuid`;
+    if (id_user === userId) {
+      whereClause = sql`${whereClause} AND f.id_user = ${id_user}::uuid`;
+    } else {
+      whereClause = sql`${whereClause} AND f.id_user = ${id_user}::uuid AND f.is_anonymous = false`;
+    }
   }
 
   // Prepare Sort Logic
