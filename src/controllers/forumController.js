@@ -618,7 +618,7 @@ const unbookmarkForum = asyncHandler(async (req, res) => {
 });
 
 const getLikeForum = asyncHandler(async (req, res) => {
-  const userId = req.user.id_user;
+  const userId = req.query.id_user || req.user.id_user;
 
   if (!userId) {
     throw new BadRequestError("id_user wajib diisi");
