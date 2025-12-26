@@ -279,159 +279,162 @@ const deleteUlasan = asyncHandler(async (req, res) => {
 });
 
 const getAllUlasan = asyncHandler(async (req, res) => {
-  const userId = req.user.id_user;
+  const userId = req.user?.id_user;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
 
-  // Filter & Sort Params
-  const { from, to, sortBy = "date", order = "desc", id_user, id_lecturer, id_subject } = req.query;
+  // 1. Ambil Parameter
+  const {
+    q, // Search query (text only)
+    from,
+    to,
+    sortBy = "date",
+    order = "desc",
+    id_user,
+    id_lecturer,
+    id_subject
+  } = req.query;
 
-  // 1. Base WHERE conditions (Filter out replies and forum content by default)
-  const whereConditions = [];
+  // ---------------------------------------------------------
+  // 2. BUILD WHERE CLAUSE (Filter Dasar)
+  // ---------------------------------------------------------
+  let whereClause = sql`1=1`;
+
+  // Default Rule: Hanya ambil ulasan 'top-level' (bukan balasan review/forum)
+  // Kecuali jika user memfilter berdasarkan id_user tertentu (profil user)
   if (!id_user) {
-    whereConditions.push(isNull(reviews.id_reply));
-    whereConditions.push(isNull(reviews.id_forum));
+    whereClause = sql`${whereClause} AND r.id_reply IS NULL AND r.id_forum IS NULL`;
   }
 
-  // 2. Add Date Filtering if provided
+  // A. Logic Search (ILIKE) - Digabung ke Where Clause
+  if (q && q.trim().length > 0) {
+    const searchPattern = `%${q}%`;
+    // Mencari di Title, Body, Nama Dosen, atau Nama Matkul
+    whereClause = sql`${whereClause} AND (
+      r.title ILIKE ${searchPattern} OR 
+      r.body ILIKE ${searchPattern} OR 
+      l.name ILIKE ${searchPattern} OR 
+      s.name ILIKE ${searchPattern}
+    )`;
+  }
+
+  // B. Filter Tanggal
   if (from && to) {
     const fromDate = new Date(from);
     fromDate.setHours(0, 0, 0, 0);
     const toDate = new Date(to);
     toDate.setHours(23, 59, 59, 999);
-
-    whereConditions.push(gte(reviews.created_at, fromDate));
-    whereConditions.push(lte(reviews.created_at, toDate));
+    whereClause = sql`${whereClause} AND r.created_at >= ${fromDate} AND r.created_at <= ${toDate}`;
   }
 
-  // 3. Add User Filtering if provided
+  // C. Filter User
   if (id_user) {
     if (id_user === userId) {
-      whereConditions.push(eq(reviews.id_user, id_user));
+      whereClause = sql`${whereClause} AND r.id_user = ${id_user}::uuid`;
     } else {
-      whereConditions.push(and(eq(reviews.id_user, id_user), eq(reviews.is_anonymous, false)));
+      whereClause = sql`${whereClause} AND r.id_user = ${id_user}::uuid AND r.is_anonymous = false`;
     }
   }
 
-  // 4. Add Lecturer filtering if provided
-  if (id_lecturer) {
-    whereConditions.push(eq(reviews.id_lecturer, id_lecturer));
-  }
+  // D. Filter Lecturer & Subject
+  if (id_lecturer) whereClause = sql`${whereClause} AND r.id_lecturer = ${id_lecturer}::uuid`;
+  if (id_subject) whereClause = sql`${whereClause} AND r.id_subject = ${id_subject}::uuid`;
 
-  // 5. Add Subject filtering if provided
-  if (id_subject) {
-    whereConditions.push(eq(reviews.id_subject, id_subject));
-  }
 
-  // 3. Prepare Sort Logic
-  const countLikes = sql`count(distinct ${likeReviews.id_like})`;
-  const countBookmarks = sql`count(distinct ${bookmarkReviews.id_bookmark})`;
-  const countPopularity = sql`(${countLikes} + ${countBookmarks})`;
+  // ---------------------------------------------------------
+  // 3. BUILD ORDER BY CLAUSE
+  // ---------------------------------------------------------
+  const isAsc = order === "asc";
+  
+  // Subqueries untuk counting (untuk sorting)
+  const countLikes = sql`(SELECT count(distinct id_like) FROM like_reviews lr WHERE lr.id_review = r.id_review)`;
+  const countBookmarks = sql`(SELECT count(distinct id_bookmark) FROM bookmark_reviews br WHERE br.id_review = r.id_review)`;
+  const countReplies = sql`(SELECT count(*) FROM reviews child WHERE child.id_reply = r.id_review)`;
 
   let orderByClause;
-  const isAsc = order === "asc";
-
+  
   switch (sortBy) {
     case "most_like":
-      orderByClause = isAsc ? asc(countLikes) : desc(countLikes);
+      orderByClause = isAsc ? sql`${countLikes} ASC` : sql`${countLikes} DESC`;
       break;
     case "most_bookmark":
-      orderByClause = isAsc ? asc(countBookmarks) : desc(countBookmarks);
+      orderByClause = isAsc ? sql`${countBookmarks} ASC` : sql`${countBookmarks} DESC`;
       break;
     case "most_popular":
-      orderByClause = isAsc ? asc(countPopularity) : desc(countPopularity);
+      orderByClause = isAsc 
+        ? sql`(${countLikes} + ${countBookmarks}) ASC` 
+        : sql`(${countLikes} + ${countBookmarks}) DESC`;
       break;
     case "most_reply":
-      const countReplies = sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`;
-      orderByClause = isAsc ? asc(countReplies) : desc(countReplies);
+      orderByClause = isAsc ? sql`${countReplies} ASC` : sql`${countReplies} DESC`;
       break;
     case "date":
     default:
-      orderByClause = isAsc
-        ? asc(reviews.created_at)
-        : desc(reviews.created_at);
+      // Default sort logic
+      orderByClause = isAsc ? sql`r.created_at ASC` : sql`r.created_at DESC`;
       break;
   }
 
-  // 4. Data Query
-  // Note: Using Drizzle query builder for cleaner dynamic filtering/sorting
-  // tailored to the structure used in sortUlasan but adapted for pagination & joins
-  const dataUlasan = await db
-    .select({
-      id_review: reviews.id_review,
-      id_user: reviews.id_user,
-      id_forum: reviews.id_forum,
-      id_reply: reviews.id_reply,
-      title: reviews.title,
-      body: reviews.body,
-      files: reviews.files,
-      created_at: reviews.created_at,
-      updated_at: reviews.updated_at,
+  // ---------------------------------------------------------
+  // 4. EKSEKUSI QUERY
+  // ---------------------------------------------------------
+  
+  // Query Utama
+  const dataUlasanResult = await db.execute(sql`
+    SELECT 
+      r.id_review, r.id_user, r.id_forum, r.id_reply, r.title, r.body, r.files, 
+      r.created_at, r.updated_at, r.is_anonymous,
 
-      lecturer_name: sql`COALESCE(${lecturers.name}, '')`,
-      subject_name: sql`COALESCE(${subjects.name}, '')`,
-      semester: subjects.semester,
+      COALESCE(l.name, '') as lecturer_name,
+      COALESCE(s.name, '') as subject_name,
+      s.semester,
+      u.name as user_name, u.image as user_image, u.email as user_email,
 
-      user_name: users.name,
-      user_image: users.image,
-      user_email: users.email,
+      (SELECT count(distinct id_like)::int FROM like_reviews lr WHERE lr.id_review = r.id_review) as total_likes,
+      (SELECT count(distinct id_bookmark)::int FROM bookmark_reviews br WHERE br.id_review = r.id_review) as total_bookmarks,
+      (SELECT count(*)::int FROM reviews child WHERE child.id_reply = r.id_review) as total_reply,
+      
+      EXISTS (SELECT 1 FROM like_reviews lr WHERE lr.id_review = r.id_review AND lr.id_user = ${userId}::uuid) as is_liked,
+      EXISTS (SELECT 1 FROM bookmark_reviews br WHERE br.id_review = r.id_review AND br.id_user = ${userId}::uuid) as is_bookmarked,
 
-      total_likes: sql`${countLikes}`.mapWith(Number),
-      total_bookmarks: sql`${countBookmarks}`.mapWith(Number),
-      total_reply: sql`(SELECT count(*)::int FROM reviews r WHERE r.id_reply = ${reviews.id_review})`.as('total_reply'),
-      is_liked: sql`count(case when ${likeReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
-      is_bookmarked: sql`count(case when ${bookmarkReviews.id_user} = ${userId} then 1 end) > 0`.mapWith(Boolean),
-      is_anonymous: reviews.is_anonymous,
-      parent_user_name: sql`(
-        CASE 
-          WHEN ${reviews.id_reply} IS NOT NULL THEN (
-            SELECT u.name FROM reviews r JOIN users u ON r.id_user = u.id_user WHERE r.id_review = ${reviews.id_reply}
-          )
-          WHEN ${reviews.id_forum} IS NOT NULL THEN (
-            SELECT u.name FROM reviews_forum f JOIN users u ON f.id_user = u.id_user WHERE f.id_forum = ${reviews.id_forum}
-          )
-          ELSE NULL
-        END
-      )`.as('parent_user_name'),
-    })
-    .from(reviews)
-    .leftJoin(lecturers, eq(reviews.id_lecturer, lecturers.id_lecturer))
-    .leftJoin(subjects, eq(reviews.id_subject, subjects.id_subject))
-    .leftJoin(users, eq(reviews.id_user, users.id_user))
-    .leftJoin(likeReviews, eq(reviews.id_review, likeReviews.id_review))
-    .leftJoin(bookmarkReviews, eq(reviews.id_review, bookmarkReviews.id_review))
-    .where(and(...whereConditions))
-    .groupBy(
-      reviews.id_review,
-      lecturers.name,
-      subjects.name,
-      subjects.semester,
-      users.id_user,
-      users.name,
-      users.image,
-      users.email
-    )
-    .orderBy(orderByClause)
-    .limit(limit)
-    .offset(offset);
+      (CASE 
+        WHEN r.id_reply IS NOT NULL THEN (SELECT u2.name FROM reviews p JOIN users u2 ON p.id_user = u2.id_user WHERE p.id_review = r.id_reply)
+        WHEN r.id_forum IS NOT NULL THEN (SELECT u3.name FROM reviews_forum f JOIN users u3 ON f.id_user = u3.id_user WHERE f.id_forum = r.id_forum)
+        ELSE NULL 
+      END) as parent_user_name
 
-  if (dataUlasan.length === 0 && page === 1) {
-    // It's acceptable to return empty list if filtering yields no results, 
-    // but if strictly following previous behavior:
-    // throw new NotFoundError("Ulasan tidak ditemukan");
-  }
+    FROM reviews r
+    LEFT JOIN lecturers l ON r.id_lecturer = l.id_lecturer
+    LEFT JOIN subjects s ON r.id_subject = s.id_subject
+    LEFT JOIN users u ON r.id_user = u.id_user
+    WHERE ${whereClause}
+    ORDER BY ${orderByClause}
+    LIMIT ${limit} OFFSET ${offset}
+  `);
 
-  // 5. Total Data Query (for pagination)
-  // We must apply the same filters to the count
-  const totalResult = await db
-    .select({ value: count() })
-    .from(reviews)
-    .where(and(...whereConditions));
+  const dataUlasan = dataUlasanResult.rows;
 
-  const totalData = totalResult[0].value;
+  // Jika halaman 1 kosong dan bukan karena filter pencarian, lempar 404 (Opsional, sesuaikan kebutuhan)
+  // if (dataUlasan.length === 0 && page === 1 && !q) {
+  //   throw new NotFoundError("Ulasan tidak ditemukan");
+  // }
+
+  // Query Total Data (untuk pagination)
+  const countResult = await db.execute(sql`
+    SELECT count(*)::int as count 
+    FROM reviews r 
+    LEFT JOIN lecturers l ON r.id_lecturer = l.id_lecturer
+    LEFT JOIN subjects s ON r.id_subject = s.id_subject
+    WHERE ${whereClause}
+  `);
+  
+  const totalData = Number(countResult.rows[0].count);
   const totalPage = Math.ceil(totalData / limit);
 
+  // ---------------------------------------------------------
+  // 5. MAPPING RESPONSE
+  // ---------------------------------------------------------
   const mappedData = dataUlasan.map((row) => ({
     id_review: row.id_review,
     id_user: row.id_user,
@@ -467,7 +470,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
 
   return res.status(200).json({
     status: true,
-    message: "Success get ulasan",
+    message: q ? "Pencarian berhasil" : "Success get ulasan",
     pagination: {
       currentPage: page,
       limit: limit,

@@ -1,6 +1,13 @@
 import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
-import { reviews, users, reviewsForum, likeForums, bookmarkForums, subjects } from "../db/schema/schema.js";
+import {
+  reviews,
+  users,
+  reviewsForum,
+  likeForums,
+  bookmarkForums,
+  subjects,
+} from "../db/schema/schema.js";
 import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -21,10 +28,13 @@ import {
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { generateEmbedding, generateQueryEmbedding } from "../service/vectorizationService.js";
-import { createClient } from '@supabase/supabase-js';
+import {
+  generateEmbedding,
+  generateQueryEmbedding,
+} from "../service/vectorizationService.js";
+import { createClient } from "@supabase/supabase-js";
 
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -92,7 +102,9 @@ const createForum = asyncHandler(async (req, res) => {
 
   const result = await db.execute(
     sql`INSERT INTO reviews_forum (id_user, id_subject, title, description, files, is_anonymous)
-          VALUES (${userId}, ${id_subject}, ${title}, ${description}, ${filesJson}, ${isAnonymous ? true : false})
+          VALUES (${userId}, ${id_subject}, ${title}, ${description}, ${filesJson}, ${
+      isAnonymous ? true : false
+    })
           RETURNING *`
   );
 
@@ -152,15 +164,17 @@ const searchForum = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: row.is_anonymous ? {
-      id_user: null,
-      name: "Anonymous",
-      image: null,
-    } : {
-      id_user: row.id_user,
-      name: row.user_name,
-      image: row.user_image,
-    },
+    user: row.is_anonymous
+      ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
+      : {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -177,18 +191,40 @@ const searchForum = asyncHandler(async (req, res) => {
 });
 
 const getAllForum = asyncHandler(async (req, res) => {
-  const userId = req.user?.id_user;
+  // Fix: Gunakan null jika undefined agar SQL tidak error
+  const userId = req.user?.id_user || null; 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
 
-  // Filter & Sort Params
-  const { from, to, sortBy = "date", order = "desc", id_user, id_subject } = req.query;
+  // 1. Ambil Parameter
+  const {
+    search = "",
+    from,
+    to,
+    sortBy = "date",
+    order = "desc",
+    id_user,
+    id_subject,
+  } = req.query;
 
-  // Build WHERE clause
+  // ---------------------------------------------------------
+  // 2. BUILD WHERE CLAUSE
+  // ---------------------------------------------------------
   let whereClause = sql`1=1`;
 
-  // Add Date Filtering if provided
+  // A. Logic Search (ILIKE) - UPDATE: Tambahkan Subject & User
+  if (search && search.trim().length > 0) {
+    const searchPattern = `%${search}%`;
+    whereClause = sql`${whereClause} AND (
+      f.title ILIKE ${searchPattern} OR 
+      f.description ILIKE ${searchPattern} OR
+      s.name ILIKE ${searchPattern} OR   -- Cari juga di nama Matkul
+      u.name ILIKE ${searchPattern}      -- Cari juga di nama User
+    )`;
+  }
+
+  // B. Filter Tanggal
   if (from && to) {
     const fromDate = new Date(from);
     fromDate.setHours(0, 0, 0, 0);
@@ -197,7 +233,7 @@ const getAllForum = asyncHandler(async (req, res) => {
     whereClause = sql`${whereClause} AND f.created_at >= ${fromDate} AND f.created_at <= ${toDate}`;
   }
 
-  // Add User Filtering if provided
+  // C. Filter User
   if (id_user) {
     if (id_user === userId) {
       whereClause = sql`${whereClause} AND f.id_user = ${id_user}::uuid`;
@@ -206,45 +242,46 @@ const getAllForum = asyncHandler(async (req, res) => {
     }
   }
 
-  // Add Subject Filtering if provided
+  // D. Filter Subject
   if (id_subject) {
     whereClause = sql`${whereClause} AND f.id_subject = ${id_subject}::uuid`;
   }
 
-  // Prepare Sort Logic
-  let orderByClause;
+  // ---------------------------------------------------------
+  // 3. BUILD ORDER BY CLAUSE
+  // ---------------------------------------------------------
   const isAsc = order === "asc";
+  const countLikes = sql`(SELECT count(*) FROM like_forums l WHERE l.id_forum = f.id_forum)`;
+  const countBookmarks = sql`(SELECT count(*) FROM bookmark_forums b WHERE b.id_forum = f.id_forum)`;
+  const countReplies = sql`(SELECT count(*) FROM reviews r WHERE r.id_forum = f.id_forum)`;
+
+  let orderByClause;
 
   switch (sortBy) {
     case "most_like":
-      orderByClause = isAsc
-        ? sql`total_like ASC`
-        : sql`total_like DESC`;
+      orderByClause = isAsc ? sql`${countLikes} ASC` : sql`${countLikes} DESC`;
       break;
     case "most_bookmark":
-      orderByClause = isAsc
-        ? sql`total_bookmark ASC`
-        : sql`total_bookmark DESC`;
+      orderByClause = isAsc ? sql`${countBookmarks} ASC` : sql`${countBookmarks} DESC`;
       break;
     case "most_popular":
       orderByClause = isAsc
-        ? sql`(total_like + total_bookmark) ASC`
-        : sql`(total_like + total_bookmark) DESC`;
+        ? sql`(${countLikes} + ${countBookmarks}) ASC`
+        : sql`(${countLikes} + ${countBookmarks}) DESC`;
       break;
     case "most_reply":
-      orderByClause = isAsc
-        ? sql`total_reply ASC`
-        : sql`total_reply DESC`;
+      orderByClause = isAsc ? sql`${countReplies} ASC` : sql`${countReplies} DESC`;
       break;
     case "date":
     default:
-      orderByClause = isAsc
-        ? sql`f.created_at ASC`
-        : sql`f.created_at DESC`;
+      orderByClause = isAsc ? sql`f.created_at ASC` : sql`f.created_at DESC`;
       break;
   }
 
-  // Data Query with dynamic WHERE and ORDER BY
+  // ---------------------------------------------------------
+  // 4. EKSEKUSI QUERY
+  // ---------------------------------------------------------
+  
   const forumData = await db.execute(sql`
     SELECT 
       f.id_forum, 
@@ -255,15 +292,19 @@ const getAllForum = asyncHandler(async (req, res) => {
       f.description, 
       f.created_at, 
       f.updated_at,
+      f.is_anonymous,
+      
       s.name as subject_name,
       u.name as user_name,
       u.image as user_image,
+
       (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
       (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
       (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply,
+      
       EXISTS (SELECT 1 FROM like_forums l WHERE l.id_forum = f.id_forum AND l.id_user = ${userId}::uuid) as is_liked,
-      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked,
-      f.is_anonymous
+      EXISTS (SELECT 1 FROM bookmark_forums b WHERE b.id_forum = f.id_forum AND b.id_user = ${userId}::uuid) as is_bookmarked
+      
     FROM reviews_forum f
     LEFT JOIN users u ON f.id_user = u.id_user
     LEFT JOIN subjects s ON f.id_subject = s.id_subject
@@ -274,16 +315,20 @@ const getAllForum = asyncHandler(async (req, res) => {
 
   const rows = forumData.rows;
 
-  // Total count query with same WHERE conditions
   const totalResult = await db.execute(sql`
     SELECT count(*)::int as count
     FROM reviews_forum f
+    LEFT JOIN subjects s ON f.id_subject = s.id_subject -- Join subject juga di count agar filter konsisten
+    LEFT JOIN users u ON f.id_user = u.id_user          -- Join user juga di count agar filter konsisten
     WHERE ${whereClause}
   `);
 
   const totalData = Number(totalResult.rows[0].count);
   const totalPage = Math.ceil(totalData / limit);
 
+  // ---------------------------------------------------------
+  // 5. MAPPING RESPONSE
+  // ---------------------------------------------------------
   const mappedData = rows.map((row) => ({
     id_forum: row.id_forum,
     id_user: row.id_user,
@@ -294,15 +339,17 @@ const getAllForum = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: row.is_anonymous ? {
-      id_user: null,
-      name: "Anonymous",
-      image: null,
-    } : {
-      id_user: row.id_user,
-      name: row.user_name,
-      image: row.user_image,
-    },
+    user: row.is_anonymous
+      ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
+      : {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -313,7 +360,7 @@ const getAllForum = asyncHandler(async (req, res) => {
 
   return res.status(200).json({
     success: true,
-    message: "Success get all forum",
+    message: search ? "Success search forum" : "Success get all forum",
     pagination: {
       currentPage: page,
       limit: limit,
@@ -372,11 +419,26 @@ const getForumById = asyncHandler(async (req, res) => {
           name: users.name,
           image: users.image,
         },
-        total_like: sql`(SELECT count(*)::int FROM like_reviews l WHERE l.id_review = ${reviews.id_review})`.as('total_like'),
-        total_bookmark: sql`(SELECT count(*)::int FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review})`.as('total_bookmark'),
-        total_reply: sql`(SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = ${reviews.id_review})`.as('total_reply'),
-        is_liked: sql`EXISTS (SELECT 1 FROM like_reviews l WHERE l.id_review = ${reviews.id_review} AND l.id_user = ${userId}::uuid)`.as('is_liked'),
-        is_bookmarked: sql`EXISTS (SELECT 1 FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review} AND b.id_user = ${userId}::uuid)`.as('is_bookmarked'),
+        total_like:
+          sql`(SELECT count(*)::int FROM like_reviews l WHERE l.id_review = ${reviews.id_review})`.as(
+            "total_like"
+          ),
+        total_bookmark:
+          sql`(SELECT count(*)::int FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review})`.as(
+            "total_bookmark"
+          ),
+        total_reply:
+          sql`(SELECT count(*)::int FROM reviews r2 WHERE r2.id_reply = ${reviews.id_review})`.as(
+            "total_reply"
+          ),
+        is_liked:
+          sql`EXISTS (SELECT 1 FROM like_reviews l WHERE l.id_review = ${reviews.id_review} AND l.id_user = ${userId}::uuid)`.as(
+            "is_liked"
+          ),
+        is_bookmarked:
+          sql`EXISTS (SELECT 1 FROM bookmark_reviews b WHERE b.id_review = ${reviews.id_review} AND b.id_user = ${userId}::uuid)`.as(
+            "is_bookmarked"
+          ),
         is_anonymous: reviews.is_anonymous,
       })
       .from(reviews)
@@ -419,18 +481,22 @@ const getForumById = asyncHandler(async (req, res) => {
   // Gabungkan hasil
   const responseData = {
     ...forum,
-    user: forum.is_anonymous ? {
-      id_user: null,
-      name: "Anonymous",
-      image: null,
-    } : forum.user,
-    reviews: reviewsResult.map(review => ({
+    user: forum.is_anonymous
+      ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
+      : forum.user,
+    reviews: reviewsResult.map((review) => ({
       ...review,
-      user: review.is_anonymous ? {
-        id_user: null,
-        name: "Anonymous",
-        image: null,
-      } : review.user
+      user: review.is_anonymous
+        ? {
+            id_user: null,
+            name: "Anonymous",
+            image: null,
+          }
+        : review.user,
     })),
   };
 
@@ -490,15 +556,17 @@ const getForumBySubject = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: row.is_anonymous ? {
-      id_user: null,
-      name: "Anonymous",
-      image: null,
-    } : {
-      id_user: row.id_user,
-      name: row.user_name,
-      image: row.user_image,
-    },
+    user: row.is_anonymous
+      ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
+      : {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -681,15 +749,17 @@ const getLikeForum = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: row.is_anonymous ? {
-      id_user: null,
-      name: "Anonymous",
-      image: null,
-    } : {
-      id_user: row.id_user,
-      name: row.user_name,
-      image: row.user_image,
-    },
+    user: row.is_anonymous
+      ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
+      : {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -751,15 +821,17 @@ const getBookmarkForum = asyncHandler(async (req, res) => {
     description: row.description,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    user: row.is_anonymous ? {
-      id_user: null,
-      name: "Anonymous",
-      image: null,
-    } : {
-      id_user: row.id_user,
-      name: row.user_name,
-      image: row.user_image,
-    },
+    user: row.is_anonymous
+      ? {
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
+      : {
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -821,17 +893,19 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
       LIMIT ${limit}`
     );
 
-    const results = similarForums.rows.map(row => ({
+    const results = similarForums.rows.map((row) => ({
       ...row,
-      user: row.is_anonymous ? {
-        id_user: null,
-        name: "Anonymous",
-        image: null,
-      } : {
-        id_user: row.id_user,
-        name: row.user_name,
-        image: row.user_image,
-      }
+      user: row.is_anonymous
+        ? {
+            id_user: null,
+            name: "Anonymous",
+            image: null,
+          }
+        : {
+            id_user: row.id_user,
+            name: row.user_name,
+            image: row.user_image,
+          },
     }));
 
     return successResponse(res, 200, "Pencarian berhasil", {
@@ -841,7 +915,10 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     // Fallback to text search if vector search fails
-    console.log("Vector search failed, falling back to text search:", error.message);
+    console.log(
+      "Vector search failed, falling back to text search:",
+      error.message
+    );
     const searchPattern = `%${query}%`;
 
     const textSearchResults = await db.execute(
@@ -869,17 +946,19 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
       `
     );
 
-    const results = textSearchResults.rows.map(row => ({
+    const results = textSearchResults.rows.map((row) => ({
       ...row,
-      user: row.is_anonymous ? {
-        id_user: null,
-        name: "Anonymous",
-        image: null,
-      } : {
-        id_user: row.id_user,
-        name: row.user_name,
-        image: row.user_image,
-      }
+      user: row.is_anonymous
+        ? {
+            id_user: null,
+            name: "Anonymous",
+            image: null,
+          }
+        : {
+            id_user: row.id_user,
+            name: row.user_name,
+            image: row.user_image,
+          },
     }));
 
     return successResponse(res, 200, "Pencarian berhasil (text search)", {
@@ -909,7 +988,9 @@ const editForum = asyncHandler(async (req, res) => {
 
   // Ownership check
   if (oldForum.id_user !== userId) {
-    throw new UnauthorizedError("Anda tidak memiliki izin untuk mengubah forum ini");
+    throw new UnauthorizedError(
+      "Anda tidak memiliki izin untuk mengubah forum ini"
+    );
   }
 
   // Upload file bila ada
@@ -919,7 +1000,10 @@ const editForum = asyncHandler(async (req, res) => {
 
   if (fileUploaded.length > 0) {
     for (const file of fileUploaded) {
-      const fileName = `ulasan/${Date.now()}-${file.originalname.replace(/\s/g, "_")}`;
+      const fileName = `ulasan/${Date.now()}-${file.originalname.replace(
+        /\s/g,
+        "_"
+      )}`;
       const { data, error } = await supabase.storage
         .from(BUCKET_NAME)
         .upload(fileName, file.buffer, {
@@ -943,8 +1027,10 @@ const editForum = asyncHandler(async (req, res) => {
   const updateData = {};
   if (title !== undefined) updateData.title = title;
   if (description !== undefined) updateData.description = description;
-  if (fileLocalLinks.length > 0) updateData.files = JSON.stringify(fileLocalLinks);
-  if (isAnonymous !== undefined) updateData.is_anonymous = isAnonymous === 'true' || isAnonymous === true;
+  if (fileLocalLinks.length > 0)
+    updateData.files = JSON.stringify(fileLocalLinks);
+  if (isAnonymous !== undefined)
+    updateData.is_anonymous = isAnonymous === "true" || isAnonymous === true;
 
   updateData.updated_at = sql`NOW()`;
 
@@ -980,7 +1066,9 @@ const deleteForum = asyncHandler(async (req, res) => {
 
   // Ownership check
   if (forum.id_user !== userId) {
-    throw new UnauthorizedError("Anda tidak memiliki izin untuk menghapus forum ini");
+    throw new UnauthorizedError(
+      "Anda tidak memiliki izin untuk menghapus forum ini"
+    );
   }
 
   await db.delete(reviewsForum).where(eq(reviewsForum.id_forum, id_forum));
@@ -1005,6 +1093,5 @@ export {
   unbookmarkForum,
   getLikeForum,
   getBookmarkForum,
-  searchSimilarForum
+  searchSimilarForum,
 };
-
