@@ -13,7 +13,7 @@ export const requireAuth = (req, res, next) => {
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
       return res
-        .status(403)
+        .status(401)
         .json({ message: "Token tidak valid atau sudah kedaluwarsa" });
     }
 
