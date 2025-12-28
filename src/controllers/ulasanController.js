@@ -289,6 +289,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     q, // Search query (text only)
     from,
     to,
+    filter,
     sortBy = "date",
     order = "desc",
     id_user,
@@ -326,6 +327,25 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     const toDate = new Date(to);
     toDate.setHours(23, 59, 59, 999);
     whereClause = sql`${whereClause} AND r.created_at >= ${fromDate} AND r.created_at <= ${toDate}`;
+  } else if (filter) {
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (filter) {
+      case "today":
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case "week":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "month":
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case "year":
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+    }
+    whereClause = sql`${whereClause} AND r.created_at >= ${startDate}`;
   }
 
   // C. Filter User
@@ -346,14 +366,14 @@ const getAllUlasan = asyncHandler(async (req, res) => {
   // 3. BUILD ORDER BY CLAUSE
   // ---------------------------------------------------------
   const isAsc = order === "asc";
-  
+
   // Subqueries untuk counting (untuk sorting)
   const countLikes = sql`(SELECT count(distinct id_like) FROM like_reviews lr WHERE lr.id_review = r.id_review)`;
   const countBookmarks = sql`(SELECT count(distinct id_bookmark) FROM bookmark_reviews br WHERE br.id_review = r.id_review)`;
   const countReplies = sql`(SELECT count(*) FROM reviews child WHERE child.id_reply = r.id_review)`;
 
   let orderByClause;
-  
+
   switch (sortBy) {
     case "most_like":
       orderByClause = isAsc ? sql`${countLikes} ASC` : sql`${countLikes} DESC`;
@@ -362,8 +382,8 @@ const getAllUlasan = asyncHandler(async (req, res) => {
       orderByClause = isAsc ? sql`${countBookmarks} ASC` : sql`${countBookmarks} DESC`;
       break;
     case "most_popular":
-      orderByClause = isAsc 
-        ? sql`(${countLikes} + ${countBookmarks}) ASC` 
+      orderByClause = isAsc
+        ? sql`(${countLikes} + ${countBookmarks}) ASC`
         : sql`(${countLikes} + ${countBookmarks}) DESC`;
       break;
     case "most_reply":
@@ -379,7 +399,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
   // ---------------------------------------------------------
   // 4. EKSEKUSI QUERY
   // ---------------------------------------------------------
-  
+
   // Query Utama
   const dataUlasanResult = await db.execute(sql`
     SELECT 
@@ -428,7 +448,7 @@ const getAllUlasan = asyncHandler(async (req, res) => {
     LEFT JOIN subjects s ON r.id_subject = s.id_subject
     WHERE ${whereClause}
   `);
-  
+
   const totalData = Number(countResult.rows[0].count);
   const totalPage = Math.ceil(totalData / limit);
 

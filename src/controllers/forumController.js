@@ -102,9 +102,8 @@ const createForum = asyncHandler(async (req, res) => {
 
   const result = await db.execute(
     sql`INSERT INTO reviews_forum (id_user, id_subject, title, description, files, is_anonymous)
-          VALUES (${userId}, ${id_subject}, ${title}, ${description}, ${filesJson}, ${
-      isAnonymous ? true : false
-    })
+          VALUES (${userId}, ${id_subject}, ${title}, ${description}, ${filesJson}, ${isAnonymous ? true : false
+      })
           RETURNING *`
   );
 
@@ -166,15 +165,15 @@ const searchForum = asyncHandler(async (req, res) => {
     updated_at: row.updated_at,
     user: row.is_anonymous
       ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      }
       : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -192,7 +191,7 @@ const searchForum = asyncHandler(async (req, res) => {
 
 const getAllForum = asyncHandler(async (req, res) => {
   // Fix: Gunakan null jika undefined agar SQL tidak error
-  const userId = req.user?.id_user || null; 
+  const userId = req.user?.id_user || null;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
@@ -202,6 +201,7 @@ const getAllForum = asyncHandler(async (req, res) => {
     search = "",
     from,
     to,
+    filter,
     sortBy = "date",
     order = "desc",
     id_user,
@@ -231,6 +231,25 @@ const getAllForum = asyncHandler(async (req, res) => {
     const toDate = new Date(to);
     toDate.setHours(23, 59, 59, 999);
     whereClause = sql`${whereClause} AND f.created_at >= ${fromDate} AND f.created_at <= ${toDate}`;
+  } else if (filter) {
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (filter) {
+      case "today":
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case "week":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "month":
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case "year":
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+    }
+    whereClause = sql`${whereClause} AND f.created_at >= ${startDate}`;
   }
 
   // C. Filter User
@@ -281,7 +300,7 @@ const getAllForum = asyncHandler(async (req, res) => {
   // ---------------------------------------------------------
   // 4. EKSEKUSI QUERY
   // ---------------------------------------------------------
-  
+
   const forumData = await db.execute(sql`
     SELECT 
       f.id_forum, 
@@ -341,15 +360,15 @@ const getAllForum = asyncHandler(async (req, res) => {
     updated_at: row.updated_at,
     user: row.is_anonymous
       ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      }
       : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -483,19 +502,19 @@ const getForumById = asyncHandler(async (req, res) => {
     ...forum,
     user: forum.is_anonymous
       ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      }
       : forum.user,
     reviews: reviewsResult.map((review) => ({
       ...review,
       user: review.is_anonymous
         ? {
-            id_user: null,
-            name: "Anonymous",
-            image: null,
-          }
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
         : review.user,
     })),
   };
@@ -558,15 +577,15 @@ const getForumBySubject = asyncHandler(async (req, res) => {
     updated_at: row.updated_at,
     user: row.is_anonymous
       ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      }
       : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -751,15 +770,15 @@ const getLikeForum = asyncHandler(async (req, res) => {
     updated_at: row.updated_at,
     user: row.is_anonymous
       ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      }
       : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -823,15 +842,15 @@ const getBookmarkForum = asyncHandler(async (req, res) => {
     updated_at: row.updated_at,
     user: row.is_anonymous
       ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
+        id_user: null,
+        name: "Anonymous",
+        image: null,
+      }
       : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
+        id_user: row.id_user,
+        name: row.user_name,
+        image: row.user_image,
+      },
     total_like: row.total_like,
     total_bookmark: row.total_bookmark,
     total_reply: row.total_reply,
@@ -897,15 +916,15 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
       ...row,
       user: row.is_anonymous
         ? {
-            id_user: null,
-            name: "Anonymous",
-            image: null,
-          }
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
         : {
-            id_user: row.id_user,
-            name: row.user_name,
-            image: row.user_image,
-          },
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     }));
 
     return successResponse(res, 200, "Pencarian berhasil", {
@@ -950,15 +969,15 @@ const searchSimilarForum = asyncHandler(async (req, res) => {
       ...row,
       user: row.is_anonymous
         ? {
-            id_user: null,
-            name: "Anonymous",
-            image: null,
-          }
+          id_user: null,
+          name: "Anonymous",
+          image: null,
+        }
         : {
-            id_user: row.id_user,
-            name: row.user_name,
-            image: row.user_image,
-          },
+          id_user: row.id_user,
+          name: row.user_name,
+          image: row.user_image,
+        },
     }));
 
     return successResponse(res, 200, "Pencarian berhasil (text search)", {
