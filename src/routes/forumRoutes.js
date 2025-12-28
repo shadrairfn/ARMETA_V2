@@ -38,7 +38,4 @@ router.post("/bookmarkForum", requireAuth, bookmarkForum);
 router.delete("/bookmarkForum", requireAuth, unbookmarkForum);
 router.get("/bookmarkForum", requireAuth, getBookmarkForum);
 
-// Similar Forum search (vector search)
-router.post("/search", requireAuth, searchSimilarForum);
-
 export default router;
