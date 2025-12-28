@@ -1,19 +1,19 @@
 import express from "express";
 import {
-  createForum,
-  deleteForum,
-  editForum,
-  getForumBySubject,
-  searchForum,
-  getAllForum,
-  getForumById,
-  likeForum,
-  unlikeForum,
-  bookmarkForum,
-  unbookmarkForum,
-  getLikeForum,
-  getBookmarkForum,
-  searchSimilarForum
+	bookmarkForum,
+	createForum,
+	deleteForum,
+	editForum,
+	getAllForum,
+	getBookmarkForum,
+	getForumById,
+	getForumBySubject,
+	getLikeForum,
+	likeForum,
+	searchForum,
+	searchSimilarForum,
+	unbookmarkForum,
+	unlikeForum,
 } from "../controllers/forumController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";
@@ -42,4 +42,3 @@ router.get("/bookmarkForum", requireAuth, getBookmarkForum);
 router.post("/search", requireAuth, searchSimilarForum);
 
 export default router;
-

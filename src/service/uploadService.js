@@ -1,26 +1,26 @@
 import { bucket } from "../firebase/firebaseAdmin.js";
 
 const uploadToFirebase = async (file, folder = "profiles") => {
-  return new Promise((resolve, reject) => {
-    const fileName = `${folder}/${Date.now()}_${file.originalname}`;
-    const blob = bucket.file(fileName);
+	return new Promise((resolve, reject) => {
+		const fileName = `${folder}/${Date.now()}_${file.originalname}`;
+		const blob = bucket.file(fileName);
 
-    const blobStream = blob.createWriteStream({
-      metadata: {
-        contentType: file.mimetype,
-      },
-    });
+		const blobStream = blob.createWriteStream({
+			metadata: {
+				contentType: file.mimetype,
+			},
+		});
 
-    blobStream.on("error", (err) => reject(err));
+		blobStream.on("error", (err) => reject(err));
 
-    blobStream.on("finish", async () => {
-      // URL public Firebase
-      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${blob.name}`;
-      resolve(publicUrl);
-    });
+		blobStream.on("finish", async () => {
+			// URL public Firebase
+			const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${blob.name}`;
+			resolve(publicUrl);
+		});
 
-    blobStream.end(file.buffer);
-  });
+		blobStream.end(file.buffer);
+	});
 };
 
 export { uploadToFirebase };

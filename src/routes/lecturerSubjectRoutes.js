@@ -1,15 +1,15 @@
 import express from "express";
 import {
-    getLecturers,
-    getSubjects,
-    createLecturer,
-    updateLecturer,
-    deleteLecturer,
-    createSubject,
-    updateSubject,
-    deleteSubject
+	createLecturer,
+	createSubject,
+	deleteLecturer,
+	deleteSubject,
+	getLecturers,
+	getSubjects,
+	updateLecturer,
+	updateSubject,
 } from "../controllers/lecturerSubjectController.js";
-import { requireAuth, requireAdmin } from "../middleware/authMiddleware.js";
+import { requireAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 

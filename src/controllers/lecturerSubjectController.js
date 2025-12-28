@@ -1,182 +1,155 @@
-import jwt from "jsonwebtoken";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db/db.js";
 import { lecturers, subjects } from "../db/schema/schema.js";
-import { eq, sql, and } from "drizzle-orm";
-
-import {
-  generateAccessToken,
-  generateRefreshToken,
-} from "../service/tokenService.js";
-
-import {
-  successResponse,
-  createdResponse,
-} from "../utils/responseHandler.js";
-
-import {
-  AppError,
-  BadRequestError,
-  UnauthorizedError,
-  ConflictError,
-  NotFoundError,
-  TokenError,
-} from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadToFirebase } from "../service/uploadService.js";
-import { generateEmbedding } from "../service/vectorizationService.js";
+import { BadRequestError, NotFoundError } from "../utils/customError.js";
 
-const getLecturers = asyncHandler(async (req, res) => {
-  const dataLecturers = await db.execute(sql`SELECT id_lecturer, name, faculty FROM lecturers`);
+const getLecturers = asyncHandler(async (_req, res) => {
+	const dataLecturers = await db.execute(sql`SELECT id_lecturer, name, faculty FROM lecturers`);
 
-  if (dataLecturers.rows.length == 0) {
-    throw new NotFoundError("Lecturers not found");
-  }
+	if (dataLecturers.rows.length === 0) {
+		throw new NotFoundError("Lecturers not found");
+	}
 
-  return res.status(200).json({
-    data: dataLecturers.rows,
-    status: true,
-    message: "Success get all lecturers",
-  });
-})
+	return res.status(200).json({
+		data: dataLecturers.rows,
+		status: true,
+		message: "Success get all lecturers",
+	});
+});
 
-const getSubjects = asyncHandler(async (req, res) => {
-  const dataSubjects = await db.execute(sql`SELECT id_subject, code, name, semester FROM subjects`);
+const getSubjects = asyncHandler(async (_req, res) => {
+	const dataSubjects = await db.execute(sql`SELECT id_subject, code, name, semester FROM subjects`);
 
-  if (dataSubjects.rows.length == 0) {
-    throw new NotFoundError("Subjects not found");
-  }
+	if (dataSubjects.rows.length === 0) {
+		throw new NotFoundError("Subjects not found");
+	}
 
-  return res.status(200).json({
-    data: dataSubjects.rows,
-    status: true,
-    message: "Success get all subjects",
-  });
-})
+	return res.status(200).json({
+		data: dataSubjects.rows,
+		status: true,
+		message: "Success get all subjects",
+	});
+});
 
 const createLecturer = asyncHandler(async (req, res) => {
-  const { name, npm, email, faculty } = req.body;
+	const { name, npm, email, faculty } = req.body;
 
-  if (!name || !faculty) {
-    throw new BadRequestError("Name and faculty are required");
-  }
+	if (!name || !faculty) {
+		throw new BadRequestError("Name and faculty are required");
+	}
 
-  const [newLecturer] = await db
-    .insert(lecturers)
-    .values({ name, npm, email, faculty })
-    .returning();
+	const [newLecturer] = await db
+		.insert(lecturers)
+		.values({ name, npm, email, faculty })
+		.returning();
 
-  return res.status(201).json({
-    data: newLecturer,
-    status: true,
-    message: "Lecturer created successfully",
-  });
+	return res.status(201).json({
+		data: newLecturer,
+		status: true,
+		message: "Lecturer created successfully",
+	});
 });
 
 const updateLecturer = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { name, npm, email, faculty } = req.body;
+	const { id } = req.params;
+	const { name, npm, email, faculty } = req.body;
 
-  const [updatedLecturer] = await db
-    .update(lecturers)
-    .set({ name, npm, email, faculty, updated_at: new Date() })
-    .where(eq(lecturers.id_lecturer, id))
-    .returning();
+	const [updatedLecturer] = await db
+		.update(lecturers)
+		.set({ name, npm, email, faculty, updated_at: new Date() })
+		.where(eq(lecturers.id_lecturer, id))
+		.returning();
 
-  if (!updatedLecturer) {
-    throw new NotFoundError("Lecturer not found");
-  }
+	if (!updatedLecturer) {
+		throw new NotFoundError("Lecturer not found");
+	}
 
-  return res.status(200).json({
-    data: updatedLecturer,
-    status: true,
-    message: "Lecturer updated successfully",
-  });
+	return res.status(200).json({
+		data: updatedLecturer,
+		status: true,
+		message: "Lecturer updated successfully",
+	});
 });
 
 const deleteLecturer = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+	const { id } = req.params;
 
-  const [deletedLecturer] = await db
-    .delete(lecturers)
-    .where(eq(lecturers.id_lecturer, id))
-    .returning();
+	const [deletedLecturer] = await db
+		.delete(lecturers)
+		.where(eq(lecturers.id_lecturer, id))
+		.returning();
 
-  if (!deletedLecturer) {
-    throw new NotFoundError("Lecturer not found");
-  }
+	if (!deletedLecturer) {
+		throw new NotFoundError("Lecturer not found");
+	}
 
-  return res.status(200).json({
-    status: true,
-    message: "Lecturer deleted successfully",
-  });
+	return res.status(200).json({
+		status: true,
+		message: "Lecturer deleted successfully",
+	});
 });
 
 const createSubject = asyncHandler(async (req, res) => {
-  const { code, name, semester } = req.body;
+	const { code, name, semester } = req.body;
 
-  if (!code || !name) {
-    throw new BadRequestError("Code and name are required");
-  }
+	if (!code || !name) {
+		throw new BadRequestError("Code and name are required");
+	}
 
-  const [newSubject] = await db
-    .insert(subjects)
-    .values({ code, name, semester })
-    .returning();
+	const [newSubject] = await db.insert(subjects).values({ code, name, semester }).returning();
 
-  return res.status(201).json({
-    data: newSubject,
-    status: true,
-    message: "Subject created successfully",
-  });
+	return res.status(201).json({
+		data: newSubject,
+		status: true,
+		message: "Subject created successfully",
+	});
 });
 
 const updateSubject = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { code, name, semester } = req.body;
+	const { id } = req.params;
+	const { code, name, semester } = req.body;
 
-  const [updatedSubject] = await db
-    .update(subjects)
-    .set({ code, name, semester })
-    .where(eq(subjects.id_subject, id))
-    .returning();
+	const [updatedSubject] = await db
+		.update(subjects)
+		.set({ code, name, semester })
+		.where(eq(subjects.id_subject, id))
+		.returning();
 
-  if (!updatedSubject) {
-    throw new NotFoundError("Subject not found");
-  }
+	if (!updatedSubject) {
+		throw new NotFoundError("Subject not found");
+	}
 
-  return res.status(200).json({
-    data: updatedSubject,
-    status: true,
-    message: "Subject updated successfully",
-  });
+	return res.status(200).json({
+		data: updatedSubject,
+		status: true,
+		message: "Subject updated successfully",
+	});
 });
 
 const deleteSubject = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+	const { id } = req.params;
 
-  const [deletedSubject] = await db
-    .delete(subjects)
-    .where(eq(subjects.id_subject, id))
-    .returning();
+	const [deletedSubject] = await db.delete(subjects).where(eq(subjects.id_subject, id)).returning();
 
-  if (!deletedSubject) {
-    throw new NotFoundError("Subject not found");
-  }
+	if (!deletedSubject) {
+		throw new NotFoundError("Subject not found");
+	}
 
-  return res.status(200).json({
-    status: true,
-    message: "Subject deleted successfully",
-  });
+	return res.status(200).json({
+		status: true,
+		message: "Subject deleted successfully",
+	});
 });
 
 export {
-  getLecturers,
-  getSubjects,
-  createLecturer,
-  updateLecturer,
-  deleteLecturer,
-  createSubject,
-  updateSubject,
-  deleteSubject
-}
+	getLecturers,
+	getSubjects,
+	createLecturer,
+	updateLecturer,
+	deleteLecturer,
+	createSubject,
+	updateSubject,
+	deleteSubject,
+};

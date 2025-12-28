@@ -1,8 +1,5 @@
 import express from "express";
-import {
-  createReport,
-  getReports,
-} from "../controllers/reportController.js";
+import { createReport, getReports } from "../controllers/reportController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();

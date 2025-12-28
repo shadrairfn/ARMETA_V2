@@ -1,26 +1,26 @@
 // app.js
-import express from "express";
-import session from "express-session";
+
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
+import express from "express";
+import session from "express-session";
 
 dotenv.config();
 
 // ✅ Load konfigurasi Passport (strategy Google, serialize, deserialize)
 import "./config/passport.js";
 import passport from "passport";
-
-import authRoutes from "./routes/googleAuth.js";
-import userRoutes from "./routes/userRoutes.js";
-import ulasanRoutes from "./routes/ulasanRoutes.js";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import chatbotRoutes from "./routes/chatbotRoutes.js";
 import forumRoutes from "./routes/forumRoutes.js";
-import reportRoutes from "./routes/reportRoutes.js";
+import authRoutes from "./routes/googleAuth.js";
 import lecturerSubjectRoutes from "./routes/lecturerSubjectRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
-import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import reportRoutes from "./routes/reportRoutes.js";
+import ulasanRoutes from "./routes/ulasanRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,25 +28,25 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  // "http://localhost:3001",
-]
+	process.env.FRONTEND_URL,
+	// "http://localhost:3001",
+];
 
 // CORS configuration
 app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
+	cors({
+		origin: allowedOrigins,
+		credentials: true,
+		methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+		allowedHeaders: ["Content-Type", "Authorization"],
+	})
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use((req, res, next) => {
-  console.log(`🌐 ${req.method} ${req.url}`);
-  next();
+app.use((req, _res, next) => {
+	console.log(`🌐 ${req.method} ${req.url}`);
+	next();
 });
 
 const publicPath = path.join(__dirname, "..", "test-frontend");
@@ -54,15 +54,15 @@ console.log("📁 Serving static files from:", publicPath);
 app.use(express.static(publicPath));
 
 app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "armeta-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: false,
-      maxAge: 24 * 60 * 60 * 1000,
-    },
-  })
+	session({
+		secret: process.env.SESSION_SECRET || "armeta-secret-key",
+		resave: false,
+		saveUninitialized: false,
+		cookie: {
+			secure: false,
+			maxAge: 24 * 60 * 60 * 1000,
+		},
+	})
 );
 
 app.use(passport.initialize());
@@ -77,12 +77,12 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/lecturer-subjects", lecturerSubjectRoutes);
 app.use("/api/admin", adminRoutes);
 
-app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    message: "ARMETA API Server is running",
-    version: "1.0.0",
-  });
+app.get("/", (_req, res) => {
+	res.json({
+		success: true,
+		message: "ARMETA API Server is running",
+		version: "1.0.0",
+	});
 });
 
 // 404 & Error handler

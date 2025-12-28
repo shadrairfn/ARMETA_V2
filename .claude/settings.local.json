@@ -1,9 +1,7 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(mkdir:*)"
-    ],
-    "deny": [],
-    "ask": []
-  }
+	"permissions": {
+		"allow": ["Bash(mkdir:*)"],
+		"deny": [],
+		"ask": []
+	}
 }

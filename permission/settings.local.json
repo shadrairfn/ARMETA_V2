@@ -1,12 +1,7 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(npm init:*)",
-      "Bash(npm install:*)",
-      "Bash(mkdir:*)",
-      "Bash(npm uninstall:*)"
-    ],
-    "deny": [],
-    "ask": []
-  }
+	"permissions": {
+		"allow": ["Bash(npm init:*)", "Bash(npm install:*)", "Bash(mkdir:*)", "Bash(npm uninstall:*)"],
+		"deny": [],
+		"ask": []
+	}
 }

@@ -1,10 +1,10 @@
 import express from "express";
 import {
-  logout,
-  refreshAccessToken,
-  getCurrentUser,
-  getUserById,
-  updateProfile
+	getCurrentUser,
+	getUserById,
+	logout,
+	refreshAccessToken,
+	updateProfile,
 } from "../controllers/userController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";

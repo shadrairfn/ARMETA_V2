@@ -1,12 +1,12 @@
 import express from "express";
 import {
-    getAdminStats,
-    getAllUsers,
-    toggleUserBan,
-    updateUserRole,
-    deleteContent,
-    getAllReports,
-    resolveReport
+	deleteContent,
+	getAdminStats,
+	getAllReports,
+	getAllUsers,
+	resolveReport,
+	toggleUserBan,
+	updateUserRole,
 } from "../controllers/adminController.js";
 import { requireAdmin } from "../middleware/authMiddleware.js";
 
