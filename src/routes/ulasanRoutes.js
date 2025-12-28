@@ -8,8 +8,6 @@ import {
     unBookmarkUlasan,
     getBookmarkUlasan,
     getLikeUlasan,
-    searchSimilarUlasan,
-    searchUlasan,
     deleteUlasan,
     getUlasanById
 } from "../controllers/ulasanController.js";
@@ -31,12 +29,6 @@ router.patch(
     requireAuth,
     upload.array("files"),
     editUlasan
-);
-
-router.post(
-    "/search",
-    requireAuth,
-    searchSimilarUlasan
 );
 
 router.get(
@@ -86,11 +78,6 @@ router.get(
     requireAuth,
     getBookmarkUlasan
 );
-
-router.get(
-    "/searchUlasan",
-    requireAuth,
-    searchUlasan)
 
 router.delete(
     "/deleteUlasan",

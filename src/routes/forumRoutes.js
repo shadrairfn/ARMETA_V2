@@ -12,8 +12,7 @@ import {
   bookmarkForum,
   unbookmarkForum,
   getLikeForum,
-  getBookmarkForum,
-  searchSimilarForum
+  getBookmarkForum
 } from "../controllers/forumController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import upload from "../middleware/uploadMiddleware.js";
@@ -37,9 +36,6 @@ router.get("/likeForum", requireAuth, getLikeForum);
 router.post("/bookmarkForum", requireAuth, bookmarkForum);
 router.delete("/bookmarkForum", requireAuth, unbookmarkForum);
 router.get("/bookmarkForum", requireAuth, getBookmarkForum);
-
-// Similar Forum search (vector search)
-router.post("/search", requireAuth, searchSimilarForum);
 
 export default router;
 

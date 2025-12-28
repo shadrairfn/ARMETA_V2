@@ -3,12 +3,7 @@ import { sql } from "drizzle-orm";
 import { generateEmbedding } from "../service/vectorizationService.js";
 import { aiClient } from "../service/llmService.js";
 import {
-  AppError,
   BadRequestError,
-  UnauthorizedError,
-  ConflictError,
-  NotFoundError,
-  TokenError,
 } from "../utils/customError.js";
 
 const askChatbot = async (req, res) => {

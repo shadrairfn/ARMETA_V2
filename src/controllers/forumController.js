@@ -1,37 +1,18 @@
-import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
 import {
   reviews,
   users,
   reviewsForum,
-  likeForums,
-  bookmarkForums,
-  subjects,
 } from "../db/schema/schema.js";
-import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { eq, sql, desc } from "drizzle-orm";
 
 import {
-  generateAccessToken,
-  generateRefreshToken,
-} from "../service/tokenService.js";
-
-import { successResponse, createdResponse } from "../utils/responseHandler.js";
-
-import {
-  AppError,
   BadRequestError,
   UnauthorizedError,
-  ConflictError,
   NotFoundError,
-  TokenError,
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
-import {
-  generateEmbedding,
-  generateQueryEmbedding,
-} from "../service/vectorizationService.js";
 import { createClient } from "@supabase/supabase-js";
 
 import dotenv from "dotenv";
@@ -866,128 +847,6 @@ const getBookmarkForum = asyncHandler(async (req, res) => {
   });
 });
 
-const searchSimilarForum = asyncHandler(async (req, res) => {
-  const { query, limit = 5 } = req.body;
-
-  if (!query || query.trim().length === 0) {
-    throw new BadRequestError("Query text wajib diisi");
-  }
-
-  // Generate query embedding
-  console.log("🔍 Generating query embedding for forum search...");
-  const queryEmbedding = await generateQueryEmbedding(query);
-  console.log("✅ Query embedding generated");
-
-  // Search for similar forums using cosine similarity
-  try {
-    const vectorString = `[${queryEmbedding.join(",")}]`;
-    // Use a CTE to pass the vector parameter once, avoiding issues with large parameters and some poolers
-    const similarForums = await db.execute(
-      sql`WITH query_vector AS (
-        SELECT ${vectorString}::vector as q_vec
-      )
-      SELECT
-        f.id_forum,
-        f.id_user,
-        f.id_subject,
-        f.title,
-        f.description,
-        f.files,
-        f.created_at,
-        f.is_anonymous,
-        (f.vectorize <=> qv.q_vec) as distance,
-        (1 - (f.vectorize <=> qv.q_vec)) as similarity,
-        s.name as subject_name,
-        u.name as user_name,
-        u.image as user_image,
-        (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
-        (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
-        (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply
-      FROM reviews_forum f
-      CROSS JOIN query_vector qv
-      LEFT JOIN users u ON f.id_user = u.id_user
-      LEFT JOIN subjects s ON f.id_subject = s.id_subject
-      WHERE f.vectorize IS NOT NULL
-      ORDER BY f.vectorize <=> qv.q_vec
-      LIMIT ${limit}`
-    );
-
-    const results = similarForums.rows.map((row) => ({
-      ...row,
-      user: row.is_anonymous
-        ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
-        : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
-    }));
-
-    return successResponse(res, 200, "Pencarian berhasil", {
-      query,
-      results,
-      count: similarForums.rows.length,
-    });
-  } catch (error) {
-    // Fallback to text search if vector search fails
-    console.log(
-      "Vector search failed, falling back to text search:",
-      error.message
-    );
-    const searchPattern = `%${query}%`;
-
-    const textSearchResults = await db.execute(
-      sql`
-        SELECT 
-          f.id_forum,
-          f.id_user,
-          f.id_subject,
-          f.title,
-          f.description,
-          f.files,
-          f.created_at,
-          f.is_anonymous,
-          s.name as subject_name,
-          u.name as user_name,
-          u.image as user_image,
-          (SELECT count(*)::int FROM like_forums l WHERE l.id_forum = f.id_forum) as total_like,
-          (SELECT count(*)::int FROM bookmark_forums b WHERE b.id_forum = f.id_forum) as total_bookmark,
-          (SELECT count(*)::int FROM reviews r WHERE r.id_forum = f.id_forum) as total_reply
-        FROM reviews_forum f
-        LEFT JOIN users u ON f.id_user = u.id_user
-        LEFT JOIN subjects s ON f.id_subject = s.id_subject
-        WHERE f.title ILIKE ${searchPattern} OR f.description ILIKE ${searchPattern} OR s.name ILIKE ${searchPattern}
-        LIMIT ${limit}
-      `
-    );
-
-    const results = textSearchResults.rows.map((row) => ({
-      ...row,
-      user: row.is_anonymous
-        ? {
-          id_user: null,
-          name: "Anonymous",
-          image: null,
-        }
-        : {
-          id_user: row.id_user,
-          name: row.user_name,
-          image: row.user_image,
-        },
-    }));
-
-    return successResponse(res, 200, "Pencarian berhasil (text search)", {
-      query,
-      results,
-      count: textSearchResults.rows.length,
-    });
-  }
-});
-
 const editForum = asyncHandler(async (req, res) => {
   const userId = req.user.id_user;
   const { id_forum, title, description, isAnonymous } = req.body;
@@ -1112,5 +971,4 @@ export {
   unbookmarkForum,
   getLikeForum,
   getBookmarkForum,
-  searchSimilarForum,
 };

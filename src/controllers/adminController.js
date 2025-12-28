@@ -1,6 +1,6 @@
 import { db } from "../db/db.js";
-import { users, reviews, reviewsForum, reports, lecturers, subjects } from "../db/schema/schema.js";
-import { eq, sql, count, desc, gte, and, lte } from "drizzle-orm";
+import { users, reviews, reviewsForum, reports, lecturers } from "../db/schema/schema.js";
+import { eq, sql, count, desc, gte } from "drizzle-orm";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { NotFoundError } from "../utils/customError.js";
 

@@ -5,19 +5,11 @@ import { eq } from "drizzle-orm";
 
 import {
   generateAccessToken,
-  generateRefreshToken,
 } from "../service/tokenService.js";
 
 import {
-  successResponse,
-  createdResponse,
-} from "../utils/responseHandler.js";
-
-import {
-  AppError,
   BadRequestError,
   UnauthorizedError,
-  ConflictError,
   NotFoundError,
   TokenError,
 } from "../utils/customError.js";
@@ -26,7 +18,6 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { createClient } from '@supabase/supabase-js';
 
 import dotenv from 'dotenv';
-import { point } from "drizzle-orm/pg-core";
 dotenv.config();
 
 const supabaseUrl = process.env.SUPABASE_URL;
