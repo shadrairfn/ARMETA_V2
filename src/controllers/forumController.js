@@ -1,35 +1,21 @@
-import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
 import {
   reviews,
   users,
   reviewsForum,
-  likeForums,
-  bookmarkForums,
-  subjects,
 } from "../db/schema/schema.js";
-import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { eq, sql, desc } from "drizzle-orm";
+
+import { successResponse } from "../utils/responseHandler.js";
 
 import {
-  generateAccessToken,
-  generateRefreshToken,
-} from "../service/tokenService.js";
-
-import { successResponse, createdResponse } from "../utils/responseHandler.js";
-
-import {
-  AppError,
   BadRequestError,
   UnauthorizedError,
-  ConflictError,
   NotFoundError,
-  TokenError,
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
-  generateEmbedding,
   generateQueryEmbedding,
 } from "../service/vectorizationService.js";
 import { createClient } from "@supabase/supabase-js";

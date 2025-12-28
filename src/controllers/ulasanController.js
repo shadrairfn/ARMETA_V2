@@ -1,4 +1,3 @@
-import jwt from "jsonwebtoken";
 import { db } from "../db/db.js";
 import {
   reviews,
@@ -9,23 +8,15 @@ import {
   lecturers,
   reviewsForum,
 } from "../db/schema/schema.js";
-import { eq, sql, and, count, desc, gte, lte, asc, isNull } from "drizzle-orm";
+import { eq, sql, and, desc, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-import {
-  generateAccessToken,
-  generateRefreshToken,
-} from "../service/tokenService.js";
-
-import { successResponse, createdResponse } from "../utils/responseHandler.js";
+import { successResponse } from "../utils/responseHandler.js";
 
 import {
-  AppError,
   BadRequestError,
   UnauthorizedError,
-  ConflictError,
   NotFoundError,
-  TokenError,
 } from "../utils/customError.js";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
